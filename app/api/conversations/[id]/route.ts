@@ -4,14 +4,7 @@ import { cookies } from 'next/headers';
 import { randomUUID } from 'crypto';
 import prisma from '@/app/lib/prisma';
 import { memoryDB } from '@/app/lib/memory-db';
-
-const MEMORY_FALLBACK_ENABLED =
-  (process.env.ENABLE_MEMORY_DB_FALLBACK || 'true').toLowerCase() === 'true';
-
-const isDbUnavailable = (error: any) =>
-  error?.message?.includes('does not exist') ||
-  error?.code === 'P2010' ||
-  error?.message?.includes('Connection');
+import { clearDbUnavailable, noteDbUnavailable, shouldUseLocalDb } from '@/app/lib/db-fallback';
 
 const resolveUser = async () => {
   let userId: string | null = null;
@@ -56,16 +49,23 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const { userId, shouldSetCookie } = await resolveUser();
     if (!userId) return NextResponse.json({ error: '未授权' }, { status: 401 });
 
+    if (shouldUseLocalDb()) {
+      const conv = await memoryDB.getConversation(params.id, userId);
+      if (!conv) return NextResponse.json({ error: '对话不存在' }, { status: 404 });
+      return respond(conv, shouldSetCookie, userId);
+    }
+
     try {
       const conversation = await prisma.conversation.findUnique({
         where: { id: params.id, userId },
         include: { learningSession: true },
       });
       if (!conversation) return NextResponse.json({ error: '对话不存在' }, { status: 404 });
+      clearDbUnavailable();
       return respond(conversation, shouldSetCookie, userId);
     } catch (dbError: any) {
-      if (MEMORY_FALLBACK_ENABLED && isDbUnavailable(dbError)) {
-        console.warn('⚠️ [GET/:id] DB 不可用，改用内存');
+      if (noteDbUnavailable(dbError)) {
+        console.warn('⚠️ [GET/:id] DB 不可用，改用本地持久化');
         const conv = await memoryDB.getConversation(params.id, userId);
         if (!conv) return NextResponse.json({ error: '对话不存在' }, { status: 404 });
         return respond(conv, shouldSetCookie, userId);
@@ -99,6 +99,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (tags !== undefined) data.tags = tags;
     if (aiExplanation !== undefined) data.aiExplanation = aiExplanation;
 
+    if (shouldUseLocalDb()) {
+      const updated = await memoryDB.updateConversation(params.id, data, userId);
+      if (!updated) return NextResponse.json({ error: '对话不存在' }, { status: 404 });
+      return respond(updated, shouldSetCookie, userId);
+    }
+
     try {
       const existing = await prisma.conversation.findUnique({
         where: { id: params.id, userId },
@@ -110,10 +116,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         data,
         include: { learningSession: true },
       });
+      clearDbUnavailable();
       return respond(updated, shouldSetCookie, userId);
     } catch (dbError: any) {
-      if (MEMORY_FALLBACK_ENABLED && isDbUnavailable(dbError)) {
-        console.warn('⚠️ [PUT/:id] DB 不可用，改用内存');
+      if (noteDbUnavailable(dbError)) {
+        console.warn('⚠️ [PUT/:id] DB 不可用，改用本地持久化');
         const updated = await memoryDB.updateConversation(params.id, data, userId);
         if (!updated) return NextResponse.json({ error: '对话不存在' }, { status: 404 });
         return respond(updated, shouldSetCookie, userId);
@@ -131,6 +138,14 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const { userId, shouldSetCookie } = await resolveUser();
     if (!userId) return NextResponse.json({ error: '未授权' }, { status: 401 });
 
+    if (shouldUseLocalDb()) {
+      const deleted = await memoryDB.deleteConversation(params.id, userId);
+      if (!deleted) {
+        return NextResponse.json({ error: '对话不存在或无权删除' }, { status: 404 });
+      }
+      return respond({ success: true }, shouldSetCookie, userId);
+    }
+
     try {
       const result = await prisma.conversation.deleteMany({
         where: { id: params.id, userId },
@@ -138,10 +153,11 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       if (result.count === 0) {
         return NextResponse.json({ error: '对话不存在或无权删除' }, { status: 404 });
       }
+      clearDbUnavailable();
       return respond({ success: true }, shouldSetCookie, userId);
     } catch (dbError: any) {
-      if (MEMORY_FALLBACK_ENABLED && isDbUnavailable(dbError)) {
-        console.warn('⚠️ [DELETE/:id] DB 不可用，改用内存');
+      if (noteDbUnavailable(dbError)) {
+        console.warn('⚠️ [DELETE/:id] DB 不可用，改用本地持久化');
         const deleted = await memoryDB.deleteConversation(params.id, userId);
         if (!deleted) {
           return NextResponse.json({ error: '对话不存在或无权删除' }, { status: 404 });

@@ -97,7 +97,7 @@ WrongQuestion    ─── 错题本
 
 ### 关键设计
 
-- **内存数据库降级**：PostgreSQL 不可用时自动切换到内存存储，保证开发环境可用
+- **本地持久化降级**：开发环境默认使用本地 JSON 存储；若 PostgreSQL 不可用，会自动切换到本地持久化 fallback
 - **会话去重**：同一用户、同一学科、同一知识点不会创建重复会话
 - **流式响应**：AI 回答实时输出，提升交互体验
 - **消息限制**：单次对话最多 32 条消息，防止 token 溢出
@@ -164,7 +164,7 @@ pnpm install
 cp .env.example .env.local
 # 编辑 .env.local，填入必要配置
 
-# 数据库迁移（如使用 PostgreSQL）
+# 数据库迁移（仅在需要连接真实 PostgreSQL 时）
 npx prisma migrate dev
 
 # 启动开发服务器
@@ -179,7 +179,10 @@ OPENAI_API_KEY=sk-xxx
 OPENAI_BASE_URL=https://api.deepseek.com
 OPENAI_MODEL=deepseek-chat
 
-# 数据库（可选）
+# 本地开发数据库模式（默认 local）
+DEV_DATABASE_MODE=local
+
+# 数据库（仅在 DEV_DATABASE_MODE=remote 或生产环境时需要）
 DATABASE_URL=postgresql://...
 
 # 认证（可选）

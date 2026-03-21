@@ -59,6 +59,7 @@ pnpm-lock.yaml
 /app/generated/prisma
 /app/generated/prisma
 .vercel
+.local-data/
 
 # clerk configuration (can include secrets)
 /.clerk/

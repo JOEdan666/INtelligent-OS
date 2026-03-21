@@ -4,16 +4,7 @@ import { cookies } from 'next/headers';
 import { randomUUID } from 'crypto';
 import { prisma } from '@/app/lib/prisma';
 import { memoryDB } from '@/app/lib/memory-db';
-
-// 允许在数据库或鉴权不可用时回退；生产环境也默认开启
-const MEMORY_FALLBACK_ENABLED =
-  (process.env.ENABLE_MEMORY_DB_FALLBACK || 'true').toLowerCase() === 'true';
-
-// 判断数据库不可用的特征错误
-const isDbUnavailable = (error: any) =>
-  error?.message?.includes('does not exist') ||
-  error?.code === 'P2010' ||
-  error?.message?.includes('Connection');
+import { clearDbUnavailable, noteDbUnavailable, shouldUseLocalDb } from '@/app/lib/db-fallback';
 
 // 统一解析用户：优先 Clerk，失败则使用 guest cookie
 const resolveUser = async (req: NextRequest) => {
@@ -78,6 +69,27 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    const respondWithLocalData = async () => {
+      const allConversations = await memoryDB.getConversations(where);
+      const conversations = allConversations.slice(skip, skip + limit);
+      return respond(
+        {
+          conversations,
+          total: allConversations.length,
+          page,
+          limit,
+          hasMore: skip + conversations.length < allConversations.length,
+          source: 'local',
+        },
+        shouldSetCookie,
+        userId,
+      );
+    };
+
+    if (shouldUseLocalDb()) {
+      return await respondWithLocalData();
+    }
+
     try {
       const [conversations, total] = await Promise.all([
         prisma.conversation.findMany({
@@ -89,6 +101,8 @@ export async function GET(req: NextRequest) {
         }),
         prisma.conversation.count({ where }),
       ]);
+
+      clearDbUnavailable();
 
       return respond(
         {
@@ -102,21 +116,9 @@ export async function GET(req: NextRequest) {
         userId,
       );
     } catch (dbError: any) {
-      if (MEMORY_FALLBACK_ENABLED && isDbUnavailable(dbError)) {
-        console.warn('⚠️ [GET] 数据库不可用，切换内存数据库');
-        const conversations = await memoryDB.getConversations(where);
-        return respond(
-          {
-            conversations,
-            total: conversations.length,
-            page: 1,
-            limit: 100,
-            hasMore: false,
-            source: 'memory',
-          },
-          shouldSetCookie,
-          userId,
-        );
+      if (noteDbUnavailable(dbError)) {
+        console.warn('⚠️ [GET] 数据库不可用，切换本地持久化数据库');
+        return await respondWithLocalData();
       }
       throw dbError;
     }
@@ -164,38 +166,70 @@ export async function POST(req: NextRequest) {
       };
     }
 
+    const useLocalDb = shouldUseLocalDb();
+
+    const findExistingLocalConversation = async () => {
+      const memConvs = await memoryDB.getConversations({ userId, type: 'learning', isArchived: false });
+      return memConvs.find((conversation: any) => conversation.subject === subject && conversation.topic === topic);
+    };
+
+    const createWithLocalDb = async () => {
+      const conversation = await memoryDB.createConversation(createData);
+      return respond(conversation, shouldSetCookie, userId);
+    };
+
     // 学习型对话去重
     if (type === 'learning' && subject && topic) {
-      try {
-        const existing = await prisma.conversation.findFirst({
-          where: { userId, type: 'learning', subject, topic, isArchived: false },
-          include: { learningSession: true },
-        });
+      if (useLocalDb) {
+        const existing = await findExistingLocalConversation();
         if (existing) {
-          const updated = await prisma.conversation.update({
-            where: { id: existing.id },
-            data: {
-              lastActivity: new Date(),
-              updatedAt: new Date(),
-              aiExplanation: aiExplanation || existing.aiExplanation,
-              messages: initialMessage
-                ? [...((existing.messages as any[]) || []), initialMessage]
-                : existing.messages || [],
+          const updated = await memoryDB.updateConversation(
+            existing.id,
+            {
+              messages: initialMessage ? [...(existing.messages || []), initialMessage] : existing.messages,
               messageCount: initialMessage
                 ? (existing.messageCount || 0) + 1
                 : existing.messageCount,
+              aiExplanation: aiExplanation || existing.aiExplanation,
             },
-            include: { learningSession: true },
-          });
+            userId,
+          );
           return respond(updated, shouldSetCookie, userId);
         }
+      }
+
+      try {
+        if (!useLocalDb) {
+          const existing = await prisma.conversation.findFirst({
+            where: { userId, type: 'learning', subject, topic, isArchived: false },
+            include: { learningSession: true },
+          });
+          if (existing) {
+            const updated = await prisma.conversation.update({
+              where: { id: existing.id },
+              data: {
+                lastActivity: new Date(),
+                updatedAt: new Date(),
+                aiExplanation: aiExplanation || existing.aiExplanation,
+                messages: initialMessage
+                  ? [...((existing.messages as any[]) || []), initialMessage]
+                  : existing.messages || [],
+                messageCount: initialMessage
+                  ? (existing.messageCount || 0) + 1
+                  : existing.messageCount,
+              },
+              include: { learningSession: true },
+            });
+            clearDbUnavailable();
+            return respond(updated, shouldSetCookie, userId);
+          }
+        }
       } catch (dbError: any) {
-        if (!(MEMORY_FALLBACK_ENABLED && isDbUnavailable(dbError))) {
+        if (!noteDbUnavailable(dbError)) {
           throw dbError;
         }
-        console.warn('⚠️ [POST-Check] DB 不可用，改用内存检查');
-        const memConvs = await memoryDB.getConversations({ userId, type: 'learning' });
-        const existing = memConvs.find((c: any) => c.subject === subject && c.topic === topic);
+        console.warn('⚠️ [POST-Check] DB 不可用，改用本地持久化检查');
+        const existing = await findExistingLocalConversation();
         if (existing) {
           const updated = await memoryDB.updateConversation(
             existing.id,
@@ -213,6 +247,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (useLocalDb || shouldUseLocalDb()) {
+      return await createWithLocalDb();
+    }
+
     try {
       console.log('Creating conversation with data:', JSON.stringify(createData, null, 2));
       const conversation = await prisma.conversation.create({
@@ -220,13 +258,13 @@ export async function POST(req: NextRequest) {
         include: { learningSession: true },
       });
       console.log('Conversation created successfully:', conversation.id);
+      clearDbUnavailable();
       return respond(conversation, shouldSetCookie, userId);
     } catch (dbError: any) {
       console.error('Database error during conversation creation:', dbError);
-      if (MEMORY_FALLBACK_ENABLED && isDbUnavailable(dbError)) {
-        console.warn('🚨 [POST] DB 不可用，使用内存数据库');
-        const conversation = await memoryDB.createConversation(createData);
-        return respond(conversation, shouldSetCookie, userId);
+      if (noteDbUnavailable(dbError)) {
+        console.warn('🚨 [POST] DB 不可用，使用本地持久化数据库');
+        return await createWithLocalDb();
       }
       throw dbError;
     }

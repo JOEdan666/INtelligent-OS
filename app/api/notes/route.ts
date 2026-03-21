@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/app/lib/prisma'
+import { memoryDB } from '@/app/lib/memory-db'
+import { clearDbUnavailable, noteDbUnavailable, shouldUseLocalDb } from '@/app/lib/db-fallback'
 
 // 笔记响应类型
 interface NoteResponse {
@@ -31,6 +33,32 @@ export async function GET(request: NextRequest) {
     const tag = searchParams.get('tag')
     const search = searchParams.get('search')
 
+    if (shouldUseLocalDb()) {
+      const notes = await memoryDB.getNotes({ includeArchived, tag, search })
+      const response: NoteResponse[] = notes.map(note => ({
+        id: note.id,
+        title: note.title,
+        icon: note.icon,
+        cover: note.cover,
+        color: note.color,
+        tags: note.tags,
+        isFavorite: note.isFavorite,
+        isArchived: note.isArchived,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        blocks: note.blocks.map((block: any) => ({
+          id: block.id,
+          type: block.type,
+          content: block.content,
+          properties: block.properties as Record<string, unknown> | null,
+          order: block.order,
+          parentId: block.parentId
+        }))
+      }))
+
+      return NextResponse.json({ success: true, data: response, source: 'local' })
+    }
+
     const where: Record<string, unknown> = {}
 
     if (!includeArchived) {
@@ -50,6 +78,7 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { updatedAt: 'desc' }
     })
+    clearDbUnavailable()
 
     // 如果有搜索词，在内存中过滤
     let filteredNotes = notes
@@ -87,6 +116,36 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: response })
   } catch (error) {
+    if (noteDbUnavailable(error)) {
+      const { searchParams } = new URL(request.url)
+      const includeArchived = searchParams.get('archived') === 'true'
+      const tag = searchParams.get('tag')
+      const search = searchParams.get('search')
+      const notes = await memoryDB.getNotes({ includeArchived, tag, search })
+      const response: NoteResponse[] = notes.map(note => ({
+        id: note.id,
+        title: note.title,
+        icon: note.icon,
+        cover: note.cover,
+        color: note.color,
+        tags: note.tags,
+        isFavorite: note.isFavorite,
+        isArchived: note.isArchived,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        blocks: note.blocks.map((block: any) => ({
+          id: block.id,
+          type: block.type,
+          content: block.content,
+          properties: block.properties as Record<string, unknown> | null,
+          order: block.order,
+          parentId: block.parentId
+        }))
+      }))
+
+      return NextResponse.json({ success: true, data: response, source: 'local' })
+    }
+
     console.error('获取笔记失败:', error)
     return NextResponse.json(
       { success: false, error: '获取笔记失败' },
@@ -97,9 +156,37 @@ export async function GET(request: NextRequest) {
 
 // POST - 创建新笔记
 export async function POST(request: NextRequest) {
+  let body: any = null
+
   try {
-    const body = await request.json()
+    body = await request.json()
     const { title, content, color, tags, icon, cover, blocks } = body
+
+    if (shouldUseLocalDb()) {
+      const note = await memoryDB.createNote({ title, content, color, tags, icon, cover, blocks })
+      const response: NoteResponse = {
+        id: note.id,
+        title: note.title,
+        icon: note.icon,
+        cover: note.cover,
+        color: note.color,
+        tags: note.tags,
+        isFavorite: note.isFavorite,
+        isArchived: note.isArchived,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        blocks: note.blocks.map((block: any) => ({
+          id: block.id,
+          type: block.type,
+          content: block.content,
+          properties: block.properties as Record<string, unknown> | null,
+          order: block.order,
+          parentId: block.parentId
+        }))
+      }
+
+      return NextResponse.json({ success: true, data: response, source: 'local' })
+    }
 
     // 创建笔记
     const note = await prisma.note.create({
@@ -135,6 +222,7 @@ export async function POST(request: NextRequest) {
         }
       }
     })
+    clearDbUnavailable()
 
     const response: NoteResponse = {
       id: note.id,
@@ -159,6 +247,32 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: response })
   } catch (error) {
+    if (noteDbUnavailable(error) && body) {
+      const note = await memoryDB.createNote(body)
+      const response: NoteResponse = {
+        id: note.id,
+        title: note.title,
+        icon: note.icon,
+        cover: note.cover,
+        color: note.color,
+        tags: note.tags,
+        isFavorite: note.isFavorite,
+        isArchived: note.isArchived,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        blocks: note.blocks.map((block: any) => ({
+          id: block.id,
+          type: block.type,
+          content: block.content,
+          properties: block.properties as Record<string, unknown> | null,
+          order: block.order,
+          parentId: block.parentId
+        }))
+      }
+
+      return NextResponse.json({ success: true, data: response, source: 'local' })
+    }
+
     console.error('创建笔记失败:', error)
     return NextResponse.json(
       { success: false, error: '创建笔记失败' },
@@ -169,8 +283,10 @@ export async function POST(request: NextRequest) {
 
 // PUT - 更新笔记
 export async function PUT(request: NextRequest) {
+  let body: any = null
+
   try {
-    const body = await request.json()
+    body = await request.json()
     const { id, title, content, color, tags, icon, cover, blocks, isFavorite, isArchived } = body
 
     if (!id) {
@@ -178,6 +294,32 @@ export async function PUT(request: NextRequest) {
         { success: false, error: '缺少笔记 ID' },
         { status: 400 }
       )
+    }
+
+    if (shouldUseLocalDb()) {
+      const note = await memoryDB.updateNote(body)
+      const response: NoteResponse = {
+        id: note.id,
+        title: note.title,
+        icon: note.icon,
+        cover: note.cover,
+        color: note.color,
+        tags: note.tags,
+        isFavorite: note.isFavorite,
+        isArchived: note.isArchived,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        blocks: note.blocks.map((block: any) => ({
+          id: block.id,
+          type: block.type,
+          content: block.content,
+          properties: block.properties as Record<string, unknown> | null,
+          order: block.order,
+          parentId: block.parentId
+        }))
+      }
+
+      return NextResponse.json({ success: true, data: response, source: 'local' })
     }
 
     // 构建更新数据
@@ -240,6 +382,7 @@ export async function PUT(request: NextRequest) {
         }
       }
     })
+    clearDbUnavailable()
 
     const response: NoteResponse = {
       id: note.id,
@@ -264,6 +407,32 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: response })
   } catch (error) {
+    if (noteDbUnavailable(error) && body?.id) {
+      const note = await memoryDB.updateNote(body)
+      const response: NoteResponse = {
+        id: note.id,
+        title: note.title,
+        icon: note.icon,
+        cover: note.cover,
+        color: note.color,
+        tags: note.tags,
+        isFavorite: note.isFavorite,
+        isArchived: note.isArchived,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        blocks: note.blocks.map((block: any) => ({
+          id: block.id,
+          type: block.type,
+          content: block.content,
+          properties: block.properties as Record<string, unknown> | null,
+          order: block.order,
+          parentId: block.parentId
+        }))
+      }
+
+      return NextResponse.json({ success: true, data: response, source: 'local' })
+    }
+
     console.error('更新笔记失败:', error)
     return NextResponse.json(
       { success: false, error: '更新笔记失败' },
@@ -285,13 +454,28 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    if (shouldUseLocalDb()) {
+      await memoryDB.deleteNote(id)
+      return NextResponse.json({ success: true, message: '笔记已删除', source: 'local' })
+    }
+
     // 由于设置了 onDelete: Cascade，删除笔记会自动删除关联的 blocks
     await prisma.note.delete({
       where: { id }
     })
+    clearDbUnavailable()
 
     return NextResponse.json({ success: true, message: '笔记已删除' })
   } catch (error) {
+    if (noteDbUnavailable(error)) {
+      const { searchParams } = new URL(request.url)
+      const id = searchParams.get('id')
+      if (id) {
+        await memoryDB.deleteNote(id)
+        return NextResponse.json({ success: true, message: '笔记已删除', source: 'local' })
+      }
+    }
+
     console.error('删除笔记失败:', error)
     return NextResponse.json(
       { success: false, error: '删除笔记失败' },
