@@ -33,7 +33,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               </div>
               <div className="leading-tight">
                 <div className="text-sm font-semibold text-slate-900 tracking-tight">智学引擎</div>
-                <div className="text-[11px] text-slate-500">Self-Learning OS</div>
+                <div className="text-[11px] text-slate-500">AI 自学系统</div>
               </div>
             </Link>
 

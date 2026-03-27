@@ -384,3 +384,11 @@ model PartnerAsset {
   @@index([sessionId])
   @@index([type])
 }
+
+model Visit {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  path      String?
+  ip        String?
+  userAgent String?  @db.Text
+}
