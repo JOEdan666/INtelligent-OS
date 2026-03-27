@@ -1,4 +1,5 @@
-# 智学引擎 (Learning Engine)
+# 智学引擎 (Learning Engine) 【INtelligent OS】
+**Developed by JOEdan**
 
 **一个 AI 驱动的结构化自学系统，用可验证的学习闭环替代低效的一对一辅导。**
 
@@ -259,3 +260,4 @@ MIT License
 ### 网址：https://learning-system-inky-zeta.vercel.app
 
 > 这是一个正在积极开发的项目。我们相信，结构化的学习流程比无结构的问答更有效。如果你也认同这个理念，欢迎加入。
+> ##我们推崇简约现代化的乔布斯式设计美学，这个可以在我们的网页中体现，哈哈##
