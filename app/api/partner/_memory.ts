@@ -4,6 +4,9 @@ const globalForPartnerMemory = global as unknown as { partnerMemory?: PartnerMem
 
 const MEMORY_FALLBACK_ENABLED =
   (process.env.ENABLE_MEMORY_DB_FALLBACK || 'true').toLowerCase() === 'true';
+const devDatabaseMode = (process.env.DEV_DATABASE_MODE || 'local').toLowerCase();
+const isDev = process.env.NODE_ENV !== 'production';
+let hasLoggedPartnerDbMode = false;
 
 interface MemoryPartnerSession {
   id: string;
@@ -186,7 +189,17 @@ export function isDbUnavailable(error: any) {
 }
 
 export function shouldUseMemory() {
-  return MEMORY_FALLBACK_ENABLED && Boolean(globalForPartnerMemory.partnerMemoryFallback);
+  if (!MEMORY_FALLBACK_ENABLED) return false;
+
+  if (!hasLoggedPartnerDbMode) {
+    hasLoggedPartnerDbMode = true;
+    console.log(
+      `[PartnerDBMode] nodeEnv=${process.env.NODE_ENV || 'development'} devDatabaseMode=${devDatabaseMode} memoryFallback=${MEMORY_FALLBACK_ENABLED}`,
+    );
+  }
+
+  const localFirst = isDev && devDatabaseMode !== 'remote';
+  return localFirst || Boolean(globalForPartnerMemory.partnerMemoryFallback);
 }
 
 export function markMemoryFallback() {

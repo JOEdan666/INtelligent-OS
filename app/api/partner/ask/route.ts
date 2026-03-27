@@ -328,6 +328,7 @@ export async function POST(request: NextRequest) {
 
     let session: any = null;
     let useMemory = shouldUseMemory();
+    console.log(`[PartnerAsk] storage=${useMemory ? 'memory' : 'prisma'}`);
 
     if (!useMemory) {
       try {

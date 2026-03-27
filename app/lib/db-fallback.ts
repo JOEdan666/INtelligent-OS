@@ -18,9 +18,19 @@ export const MEMORY_FALLBACK_ENABLED =
   (process.env.ENABLE_MEMORY_DB_FALLBACK || 'true').toLowerCase() === 'true';
 
 const devDatabaseMode = (process.env.DEV_DATABASE_MODE || 'local').toLowerCase();
+const isDev = process.env.NODE_ENV !== 'production';
+let hasLoggedDbMode = false;
+
+const logDbModeOnce = () => {
+  if (hasLoggedDbMode) return;
+  hasLoggedDbMode = true;
+  console.log(
+    `[DBMode] nodeEnv=${process.env.NODE_ENV || 'development'} devDatabaseMode=${devDatabaseMode} memoryFallback=${MEMORY_FALLBACK_ENABLED}`,
+  );
+};
 
 export const shouldPreferLocalDb = () =>
-  process.env.NODE_ENV !== 'production' && devDatabaseMode !== 'remote';
+  isDev && devDatabaseMode !== 'remote';
 
 export const isDbUnavailable = (error: any) =>
   error?.code === 'P1001' ||
@@ -30,8 +40,13 @@ export const isDbUnavailable = (error: any) =>
   /Connection/i.test(String(error?.message || ''));
 
 export const shouldUseLocalDb = () =>
-  MEMORY_FALLBACK_ENABLED &&
-  (shouldPreferLocalDb() || fallbackState.unavailableUntil > Date.now());
+  (() => {
+    logDbModeOnce();
+    return (
+      MEMORY_FALLBACK_ENABLED &&
+      (shouldPreferLocalDb() || fallbackState.unavailableUntil > Date.now())
+    );
+  })();
 
 export const noteDbUnavailable = (error: any) => {
   if (!MEMORY_FALLBACK_ENABLED || !isDbUnavailable(error)) {
