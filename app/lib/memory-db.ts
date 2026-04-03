@@ -152,7 +152,9 @@ type LocalFallbackState = {
   noteBlocks: NoteBlockRecord[];
 };
 
-const DB_DIR = path.join(process.cwd(), '.local-data');
+const DB_DIR = process.env.VERCEL
+  ? path.join('/tmp', '.local-data')
+  : path.join(process.cwd(), '.local-data');
 const DB_FILE = path.join(DB_DIR, 'dev-db.json');
 
 const createDefaultState = (): LocalFallbackState => ({
@@ -171,10 +173,11 @@ const globalForMemoryDB = global as unknown as { memoryDB: MemoryDB };
 
 class MemoryDB {
   private state: LocalFallbackState;
+  private persistenceAvailable = true;
 
   constructor() {
     this.state = this.loadState();
-    console.log('🌟 [LocalFallbackDB] 初始化本地持久化数据库');
+    console.log(`🌟 [LocalFallbackDB] 初始化本地回退数据库 (${DB_FILE})`);
   }
 
   private loadState(): LocalFallbackState {
@@ -200,8 +203,17 @@ class MemoryDB {
   }
 
   private persist() {
-    mkdirSync(DB_DIR, { recursive: true });
-    writeFileSync(DB_FILE, JSON.stringify(this.state, null, 2), 'utf8');
+    if (!this.persistenceAvailable) {
+      return;
+    }
+
+    try {
+      mkdirSync(DB_DIR, { recursive: true });
+      writeFileSync(DB_FILE, JSON.stringify(this.state, null, 2), 'utf8');
+    } catch (error) {
+      this.persistenceAvailable = false;
+      console.warn('⚠️ [LocalFallbackDB] 持久化失败，已回退为纯内存模式:', error);
+    }
   }
 
   private clone<T>(value: T): T {
