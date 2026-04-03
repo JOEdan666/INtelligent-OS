@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { BookOpen, Clock, CheckCircle, XCircle, ArrowRight, RotateCcw, Trophy, Terminal, RefreshCw } from 'lucide-react'
+import { BookOpen, CheckCircle, XCircle, RotateCcw, RefreshCw } from 'lucide-react'
 import MarkdownRenderer from '../MarkdownRenderer'
 
 interface Question {
@@ -256,7 +256,6 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [streamingText, setStreamingText] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [timeElapsed, setTimeElapsed] = useState(0)
   const [isCompleted, setIsCompleted] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -338,7 +337,6 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
       } catch {}
     } catch (error) {
       console.error('=== 题目生成失败 ===')
-      // ... 错误处理逻辑保持不变 ...
       const errorMessage = error instanceof Error ? error.message : '未知错误'
       
       if (errorMessage.includes('fetch') || errorMessage.includes('timeout') || errorMessage.includes('network')) {
@@ -409,10 +407,10 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
   // Loading Steps State
   const [loadingStep, setLoadingStep] = useState(0)
   const loadingMessages = [
-    "正在深入分析学习内容与考点...",
-    "正在构建题目架构与难度分层...",
-    "正在生成干扰项与详细解析...",
-    "正在进行最终质量校对..."
+    "Analyzing learning content and key points...",
+    "Building question structure and difficulty layers...",
+    "Generating distractors and detailed explanations...",
+    "Performing final quality checks..."
   ]
 
   // Cycle through loading messages
@@ -429,12 +427,12 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
     return (
       <div className="flex flex-col items-center justify-center py-20 max-w-2xl mx-auto">
         <div className="relative mb-8">
-          <div className="w-20 h-20 border-4 border-blue-100 rounded-full animate-spin"></div>
-          <div className="absolute top-0 left-0 w-20 h-20 border-4 border-blue-600 rounded-full animate-spin border-t-transparent"></div>
-          <BookOpen className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-blue-600 w-8 h-8" />
+          <div className="w-20 h-20 border-[1px] border-white/10 rounded-full animate-spin"></div>
+          <div className="absolute top-0 left-0 w-20 h-20 border-[1px] border-[var(--accent)] rounded-full animate-spin border-t-transparent shadow-[0_0_15px_rgba(10,132,255,0.4)]"></div>
+          <BookOpen className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-[var(--accent)] w-8 h-8" />
         </div>
         
-        <h3 className="text-xl font-bold text-slate-800 mb-2">AI 正在生成诊断题目</h3>
+        <h3 className="text-xl font-medium text-highlight mb-2 tracking-tight">AI Generating Quiz</h3>
         
         <div className="h-8 overflow-hidden relative w-full text-center">
           <AnimatePresence mode='wait'>
@@ -443,7 +441,7 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="text-slate-500"
+              className="text-text-secondary font-light"
             >
               {loadingMessages[loadingStep]}
             </motion.p>
@@ -454,8 +452,8 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
           {[0, 1, 2, 3].map((step) => (
             <div 
               key={step}
-              className={`h-1.5 rounded-full transition-all duration-500 ${
-                step === loadingStep ? 'w-8 bg-blue-600' : 'w-2 bg-slate-200'
+              className={`h-[2px] rounded-full transition-all duration-500 ${
+                step === loadingStep ? 'w-8 bg-[var(--accent)]' : 'w-2 bg-white/20'
               }`}
             />
           ))}
@@ -468,17 +466,17 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
   if (!questions || questions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6">
+        <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mb-6">
           <XCircle className="w-8 h-8 text-red-500" />
         </div>
-        <h3 className="text-xl font-bold text-slate-800 mb-2">题目生成失败</h3>
-        <p className="text-slate-500 mb-6 max-w-md text-center">可能是网络连接问题或 AI 服务繁忙，请稍后重试。</p>
+        <h3 className="text-xl font-semibold text-highlight mb-2">Generation Failed</h3>
+        <p className="text-text-secondary mb-6 max-w-md text-center font-light">Network issue or AI service is busy. Please try again later.</p>
         <button 
           onClick={() => generateQuestions(true)}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+          className="apple-btn flex items-center gap-2"
         >
           <RotateCcw className="w-4 h-4" />
-          重试
+          Retry
         </button>
       </div>
     )
@@ -486,57 +484,59 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
 
   const currentQuestion = questions[currentQuestionIndex];
 
-  // 再次安全检查：防止索引越界
-  if (!currentQuestion) {
-     return null;
-  }
+  if (!currentQuestion) return null;
 
   return (
     <div className="max-w-3xl mx-auto">
       {/* 进度条 */}
       <div className="mb-8">
-        <div className="flex justify-between items-center text-sm text-slate-500 mb-2">
-          <div className="flex items-center gap-4">
-            <span>进度 {currentQuestionIndex + 1}/{questions.length}</span>
-            <span>已用时 {Math.floor(timeElapsed / 60)}:{(timeElapsed % 60).toString().padStart(2, '0')}</span>
+        <div className="flex justify-between items-center text-sm text-text-secondary mb-2">
+          <div className="flex items-center gap-4 font-medium tracking-wide">
+            <span>Step {currentQuestionIndex + 1}/{questions.length}</span>
+            <span>{Math.floor(timeElapsed / 60)}:{(timeElapsed % 60).toString().padStart(2, '0')}</span>
           </div>
           <button 
             onClick={() => generateQuestions(true)}
-            className="flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 rounded transition-colors text-xs"
-            title="对题目不满意？点击由 AI 重新生成"
+            className="flex items-center gap-1.5 text-[var(--accent)] hover:text-white hover:bg-white/5 px-2.5 py-1.5 rounded-md transition-all duration-200 text-xs font-medium"
+            title="Regenerate Quiz"
           >
-            <RefreshCw className="w-3 h-3" />
-            换一批
+            <RefreshCw className="w-3.5 h-3.5" />
+            Regenerate
           </button>
         </div>
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-1 bg-white/10 rounded-full overflow-hidden">
           <motion.div 
-            className="h-full bg-blue-600"
+            className="h-full bg-[var(--accent)] shadow-[0_0_10px_rgba(10,132,255,0.6)]"
             initial={{ width: 0 }}
             animate={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
           />
         </div>
       </div>
 
-      {/* 题目卡片 */}
+      {/* 题目卡片 - 采用 Apple Glass 风格 */}
       <AnimatePresence mode='wait'>
         <motion.div
           key={currentQuestion.id}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-10 min-h-[400px] flex flex-col"
+          initial={{ opacity: 0, scale: 0.98, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.98, y: -10 }}
+          transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+          className="apple-glass p-6 md:p-10 min-h-[400px] flex flex-col relative overflow-hidden"
         >
-          <div className="flex items-start gap-4 mb-6">
-            <span className="flex-shrink-0 px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold">
-              {currentQuestion.type === 'multiple_choice' ? '选择题' : 
-               currentQuestion.type === 'short_answer' ? '填空题' : '简答题'}
+          {/* Subtle background glow */}
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-[var(--accent)] rounded-full blur-[100px] opacity-10 pointer-events-none" />
+
+          <div className="flex items-start gap-4 mb-8">
+            <span className="flex-shrink-0 px-3 py-1 bg-white/5 border border-white/10 text-[var(--accent)] rounded-full text-xs font-semibold tracking-wider uppercase">
+              {currentQuestion.type === 'multiple_choice' ? 'Multiple Choice' : 
+               currentQuestion.type === 'short_answer' ? 'Short Answer' : 'Essay'}
             </span>
-            <span className="text-sm text-slate-400 mt-1">{currentQuestion.points} 分</span>
+            <span className="text-sm text-text-secondary mt-1 font-medium">{currentQuestion.points} pts</span>
           </div>
 
-          <div className="text-xl md:text-2xl font-medium text-slate-900 leading-relaxed mb-8 flex items-start gap-2">
-            <span className="flex-shrink-0">{currentQuestionIndex + 1}.</span>
+          <div className="text-xl md:text-2xl font-medium text-highlight leading-relaxed mb-10 flex items-start gap-3">
+            <span className="flex-shrink-0 text-text-secondary">{currentQuestionIndex + 1}.</span>
             <div className="flex-1 overflow-x-auto">
               <MarkdownRenderer
                 content={currentQuestion.question}
@@ -555,18 +555,18 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
                     <button
                       key={idx}
                       onClick={() => handleAnswerSelect(option)}
-                      className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex items-center gap-4 ${
+                      className={`apple-list-item w-full text-left border-[0.5px] flex items-center gap-4 group ${
                         isSelected 
-                          ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm' 
-                          : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50 text-slate-600'
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/10 shadow-[0_0_15px_rgba(10,132,255,0.15)]' 
+                          : 'border-white/5 bg-white/5 hover:border-white/20 hover:bg-white/10'
                       }`}
                     >
-                      <span className={`w-8 h-8 rounded-full flex items-center justify-center border-2 text-sm font-bold transition-colors ${
-                        isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-200 text-slate-400'
+                      <span className={`w-8 h-8 rounded-full flex items-center justify-center border-[1px] text-sm font-medium transition-colors duration-200 ${
+                        isSelected ? 'border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_0_10px_rgba(10,132,255,0.4)]' : 'border-white/20 text-text-secondary group-hover:border-white/40 group-hover:text-highlight'
                       }`}>
                         {String.fromCharCode(65 + idx)}
                       </span>
-                      <div className="text-lg flex-1">
+                      <div className="text-lg flex-1 text-highlight">
                         <MarkdownRenderer
                           content={option.replace(/^[A-D][\.\、\s]*/, '')}
                           fontSize="sm"
@@ -581,27 +581,27 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
               <textarea
                 value={answers[currentQuestionIndex]}
                 onChange={(e) => handleAnswerSelect(e.target.value)}
-                placeholder="请输入你的答案..."
-                className="w-full h-40 p-4 rounded-xl border-2 border-slate-200 focus:border-blue-500 focus:ring-0 resize-none text-lg"
+                placeholder="Type your answer here..."
+                className="apple-input w-full h-40 resize-none text-lg font-light leading-relaxed placeholder:text-white/20"
               />
             )}
           </div>
 
-          <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center">
+          <div className="mt-10 pt-6 border-t border-white/10 flex justify-between items-center">
              <button
               onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
               disabled={currentQuestionIndex === 0}
-              className="px-6 py-2 text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors"
+              className="apple-btn-secondary bg-transparent border-transparent hover:bg-white/5 px-6 py-2.5 text-text-secondary hover:text-highlight disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
             >
-              上一题
+              Previous
             </button>
             
             <button
               onClick={handleNext}
               disabled={!answers[currentQuestionIndex]}
-              className="px-8 py-3 bg-blue-600 text-white rounded-xl font-semibold shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:shadow-none disabled:hover:translate-y-0"
+              className="apple-btn px-8 py-3 text-base"
             >
-              {currentQuestionIndex === questions.length - 1 ? '提交测验' : '下一题'}
+              {currentQuestionIndex === questions.length - 1 ? 'Submit Quiz' : 'Next Question'}
             </button>
           </div>
         </motion.div>

@@ -14,39 +14,35 @@ import {
 const features = [
   {
     title: '知识库',
-    desc: '上传学习资料，AI智能管理与分析',
+    desc: '上传学习资料，统一整理、检索与辅助讲解。',
     href: '/knowledge-base',
     icon: Database,
-    color: 'from-blue-500 to-cyan-500',
-    bgColor: 'bg-blue-50',
-    iconColor: 'text-blue-600'
+    bgColor: 'bg-sky-50',
+    iconColor: 'text-sky-700'
   },
   {
     title: '学习历史',
-    desc: '复盘记录、错题追踪与知识图谱',
+    desc: '保留复盘记录、错题追踪和学习轨迹。',
     href: '/learning-history',
     icon: History,
-    color: 'from-purple-500 to-pink-500',
-    bgColor: 'bg-purple-50',
-    iconColor: 'text-purple-600'
+    bgColor: 'bg-sky-50',
+    iconColor: 'text-sky-700'
   },
   {
     title: '私教对话',
-    desc: '与专属私教自由对话，答疑解惑',
+    desc: '围绕当前问题即时提问，快速获得讲解。',
     href: '/unified-chat',
     icon: MessageSquare,
-    color: 'from-green-500 to-emerald-500',
-    bgColor: 'bg-green-50',
-    iconColor: 'text-green-600'
+    bgColor: 'bg-sky-50',
+    iconColor: 'text-sky-700'
   },
   {
     title: '学习笔记',
-    desc: '智能笔记管理，知识点归纳整理',
+    desc: '沉淀知识点、连接问题和个人理解。',
     href: '/notes',
     icon: BookOpen,
-    color: 'from-orange-500 to-amber-500',
-    bgColor: 'bg-orange-50',
-    iconColor: 'text-orange-600'
+    bgColor: 'bg-sky-50',
+    iconColor: 'text-sky-700'
   }
 ]
 
@@ -58,27 +54,25 @@ const stats = [
 export default function FeaturesGrid() {
   return (
     <LazyMotion features={domAnimation}>
-    <section className="py-20 bg-white">
+    <section className="bg-white py-20">
       <div className="max-w-6xl mx-auto px-6">
-        {/* Section Header */}
         <m.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <span className="inline-block px-4 py-1.5 bg-indigo-100 text-indigo-700 text-sm font-medium rounded-full mb-4">
+          <span className="mb-4 inline-block rounded-full border border-sky-100 bg-sky-50 px-4 py-1.5 text-sm font-medium text-sky-700">
             功能模块
           </span>
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            全方位学习助手
+          <h2 className="mb-4 text-3xl font-semibold tracking-[-0.05em] text-slate-950 md:text-4xl">
+            把学习过程收进一个入口
           </h2>
-          <p className="text-gray-500 text-lg max-w-md mx-auto">
-            多维度功能支持，打造高效学习闭环
+          <p className="mx-auto max-w-xl text-lg leading-8 text-slate-500">
+            从资料、对话、历史到笔记，所有环节都围绕同一个学习目标组织。
           </p>
         </m.div>
 
-        {/* Features Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
           {features.map((feature, index) => (
             <m.div
@@ -90,25 +84,22 @@ export default function FeaturesGrid() {
             >
               <Link
                 href={feature.href}
-                className="group block h-full p-6 bg-white rounded-2xl border-2 border-gray-100 hover:border-transparent hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300"
+                className="group block h-full rounded-[1.75rem] border border-sky-100/90 bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-sky-200 hover:shadow-[0_28px_80px_-56px_rgba(59,130,246,0.34)]"
               >
-                {/* Icon */}
-                <div className={`w-14 h-14 rounded-xl ${feature.bgColor} flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
+                <div className={`mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${feature.bgColor} transition-transform group-hover:scale-105`}>
                   <feature.icon className={`w-7 h-7 ${feature.iconColor}`} />
                 </div>
 
-                {/* Content */}
-                <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-purple-600 transition-colors">
+                <h3 className="mb-2 text-xl font-semibold tracking-[-0.04em] text-slate-950 transition-colors group-hover:text-slate-700">
                   {feature.title}
                 </h3>
-                <p className="text-gray-500 text-sm leading-relaxed mb-4">
+                <p className="mb-5 text-sm leading-7 text-slate-500">
                   {feature.desc}
                 </p>
 
-                {/* Arrow */}
-                <div className="flex items-center text-purple-600 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center text-sm font-medium text-sky-700 opacity-0 transition-opacity group-hover:opacity-100">
                   <span>进入</span>
-                  <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </div>
               </Link>
             </m.div>
@@ -120,15 +111,15 @@ export default function FeaturesGrid() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-3xl p-8 md:p-12 border border-blue-100"
+          className="rounded-[2rem] border border-sky-100 bg-[linear-gradient(135deg,#eff8ff_0%,#e8f1ff_45%,#f8fbff_100%)] p-8 md:p-12"
         >
           <div className="grid md:grid-cols-2 gap-8 items-center">
             <div>
-              <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
-                AI 驱动，让学习更智能
+              <h3 className="mb-4 text-2xl font-semibold tracking-[-0.05em] text-slate-950 md:text-3xl">
+                AI 在这里不是噱头，而是学习结构
               </h3>
-              <p className="text-gray-600 leading-relaxed">
-                基于先进的 AI 技术，智学引擎能够精准分析学习状态，
+              <p className="leading-8 text-slate-600">
+                基于先进的 AI 技术，学伴能够精准分析学习状态，
                 提供个性化的学习建议和内容推荐。
               </p>
             </div>
@@ -136,14 +127,14 @@ export default function FeaturesGrid() {
               {stats.map((stat) => (
                 <div
                   key={stat.label}
-                  className="flex items-center gap-4 p-4 bg-white rounded-xl shadow-sm border border-blue-50"
+                  className="flex items-center gap-4 rounded-2xl border border-white/80 bg-white/82 p-4 shadow-sm"
                 >
-                  <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <stat.icon className="w-6 h-6 text-blue-600" />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-50">
+                    <stat.icon className="h-6 w-6 text-sky-700" />
                   </div>
                   <div>
-                    <div className="text-gray-900 font-semibold">{stat.label}</div>
-                    <div className="text-gray-500 text-sm">{stat.value}</div>
+                    <div className="font-semibold text-slate-900">{stat.label}</div>
+                    <div className="text-sm text-slate-500">{stat.value}</div>
                   </div>
                 </div>
               ))}

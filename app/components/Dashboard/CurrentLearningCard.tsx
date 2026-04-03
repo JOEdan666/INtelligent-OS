@@ -64,35 +64,35 @@ export default function CurrentLearningCard() {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <div className="zen-panel overflow-hidden transition-transform duration-300 hover:-translate-y-0.5">
+      <div className="apple-card overflow-hidden transition-transform duration-300 hover:-translate-y-1">
         <div className="p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           
           {/* 左侧信息 */}
           <div className="flex-1 space-y-4">
             <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-700 text-xs font-semibold tracking-wide uppercase">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] text-xs font-semibold tracking-wide uppercase border border-[var(--accent)]/20">
                 <Activity className="w-3.5 h-3.5" />
                 正在进行
               </span>
-              <span className="flex items-center gap-1.5 text-slate-400 text-xs font-medium">
+              <span className="flex items-center gap-1.5 text-[var(--text-secondary)] text-xs font-medium">
                 <Clock className="w-3.5 h-3.5" />
                 上次活跃：{getLastActiveText(latestSession.lastActivity)}
               </span>
             </div>
 
             <div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-2 flex items-center gap-3">
+              <h2 className="text-2xl font-bold text-[var(--highlight)] mb-2 flex items-center gap-3">
                 {latestSession.subject} · {latestSession.topic}
               </h2>
-              <p className="text-slate-600 text-base">
-                当前阶段：<span className="font-semibold text-slate-900">{stateMeta.label}</span> - {stateMeta.desc}
+              <p className="text-[var(--text-secondary)] text-base">
+                当前阶段：<span className="font-semibold text-[var(--text-primary)]">{stateMeta.label}</span> - {stateMeta.desc}
               </p>
             </div>
 
             {/* 简易进度指示条 */}
-            <div className="w-full max-w-md h-1.5 bg-sky-100 rounded-full overflow-hidden">
+            <div className="w-full max-w-md h-1.5 bg-[var(--border-color)] rounded-full overflow-hidden">
               <div 
-                className="h-full bg-gradient-to-r from-sky-400 to-blue-600 rounded-full" 
+                className="h-full bg-gradient-to-r from-blue-400 to-[var(--accent)] rounded-full" 
                 style={{ width: '60%' }} // 这里暂时写死，后续可以根据 state 计算进度
               />
             </div>
@@ -101,7 +101,7 @@ export default function CurrentLearningCard() {
           {/* 右侧行动按钮 */}
           <button
             onClick={handleContinue}
-            className="group relative inline-flex items-center gap-3 px-7 py-3.5 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-xl font-semibold shadow-md hover:from-sky-500 hover:to-blue-700 transition-colors duration-200 whitespace-nowrap"
+            className="group relative inline-flex items-center gap-3 px-7 py-3.5 bg-[var(--accent)] text-white rounded-xl font-semibold shadow-md hover:brightness-110 transition-all duration-200 whitespace-nowrap"
           >
             <PlayCircle className="w-5 h-5 fill-current" />
             <span>继续学习</span>

@@ -11,14 +11,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: '#3B82F6',
-        secondary: '#6366F1',
-        accent: '#EC4899',
-        neutral: '#1F2937',
-        'neutral-light': '#F3F4F6',
+        primary: '#0A84FF',
+        secondary: '#5E5CE6',
+        accent: '#0A84FF',
+        neutral: '#1E1E1E',
+        'neutral-light': '#2C2C2E',
+        background: 'var(--bg-main)',
+        card: 'var(--bg-card)',
+        glass: 'var(--bg-glass)',
+        text: 'var(--text-primary)',
+        'text-secondary': 'var(--text-secondary)',
       },
       fontFamily: {
-        inter: ['Inter', 'sans-serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"SF Pro Display"', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+      },
+      boxShadow: {
+        'apple-subtle': '0 8px 32px rgba(0, 0, 0, 0.4)',
+        'apple-inner': 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+      },
+      transitionTimingFunction: {
+        'apple-ease': 'cubic-bezier(0.25, 0.1, 0.25, 1)',
+      },
+      transitionDuration: {
+        '200': '200ms',
+        '150': '150ms',
       },
       typography: (theme: any) => ({
         DEFAULT: {

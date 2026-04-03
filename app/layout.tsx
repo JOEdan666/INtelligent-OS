@@ -8,14 +8,14 @@ import ThemeProvider from './providers/ThemeProvider'
 import ErrorBoundary from './components/ErrorBoundary'
 
 export const metadata: Metadata = {
-  title: '智学引擎',
-  description: '智学引擎：AI驱动的个性化学习系统，精准诊断、智能讲解、高效提分',
+  title: '学伴',
+  description: '学伴：AI驱动的个性化学习助手，帮助你诊断薄弱点、系统学习、即时对话',
   openGraph: {
-    title: '智学引擎',
-    description: 'AI驱动的个性化学习系统，精准诊断、智能讲解、高效提分',
-    siteName: '智学引擎',
+    title: '学伴',
+    description: 'AI驱动的个性化学习助手，帮助你诊断薄弱点、系统学习、即时对话',
+    siteName: '学伴',
     images: [
-      { url: '/intelligent.jpg', width: 1200, height: 630, alt: '智学引擎' }
+      { url: '/intelligent.jpg', width: 1200, height: 630, alt: '学伴' }
     ],
     locale: 'zh_CN',
     type: 'website'
@@ -33,7 +33,7 @@ export default function RootLayout({
         {/* 使用系统字体，避免构建时联网下载 Google Fonts 导致 ECONNRESET */}
         <body className="min-h-screen antialiased">
           <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify({
-            '@context':'https://schema.org', '@type':'WebSite', name:'智学引擎',
+            '@context':'https://schema.org', '@type':'WebSite', name:'学伴',
           })}} />
           
           <ErrorBoundary>

@@ -68,16 +68,16 @@ export default function QuickStart() {
   const canStart = Boolean(grade && subject)
 
   return (
-    <section id="quick-start" className="zen-panel px-6 py-8 md:px-10 md:py-10">
-      <div className="flex flex-col gap-1 mb-8">
+    <section id="quick-start" className="zen-panel mx-4 px-6 py-8 md:mx-auto md:max-w-6xl md:px-10 md:py-10">
+      <div className="mb-8 flex flex-col gap-1">
         <span className="zen-chip w-fit">首页核心入口</span>
-        <h2 className="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-slate-900">开始一次学习会话</h2>
-        <p className="text-sm md:text-base text-slate-600">
+        <h2 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-slate-950 md:text-4xl">开始一次学习会话</h2>
+        <p className="max-w-2xl text-sm text-slate-600 md:text-base md:leading-7">
           只保留必要选择项，完成后立即进入学习流程。
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
         <SelectField
           icon={GraduationCap}
           label="年级"
@@ -126,7 +126,7 @@ export default function QuickStart() {
       </div>
 
       <div className="mt-7 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <p className="text-xs md:text-sm text-slate-500">
+        <p className="text-xs text-slate-500 md:text-sm">
           支持主流教材体系，进入后可继续调整学习路径。
         </p>
         <button
@@ -160,8 +160,8 @@ function SelectField({
   disabled?: boolean
 }) {
   return (
-    <label className="block space-y-2">
-      <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+    <label className="block space-y-2.5">
+      <span className="inline-flex items-center gap-2 text-sm font-medium tracking-[-0.02em] text-slate-700">
         <Icon className="w-4 h-4 text-slate-500" />
         {label}
       </span>

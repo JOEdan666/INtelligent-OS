@@ -1,193 +1,166 @@
 'use client'
+
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { motion } from 'framer-motion'
-import { Sparkles, Brain, Target, Rocket, CheckCircle, TrendingUp, Clock } from 'lucide-react'
+import { ArrowRight, Rocket, Sparkles, BrainCircuit, Target, Network } from 'lucide-react'
 
 const CurrentLearningCard = dynamic(() => import('./Dashboard/CurrentLearningCard'), { ssr: false })
 
 export default function HeroSection() {
-  const features = [
-    { icon: Brain, text: 'AI精准诊断', desc: '秒级定位知识薄弱点' },
-    { icon: Target, text: '个性化学习', desc: '千人千面学习路径' },
-    { icon: TrendingUp, text: '高效提分', desc: '平均提升30%+成绩' }
-  ]
-
   return (
-    <section className="relative min-h-[680px] flex items-center overflow-hidden">
-      {/* Sky blue gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-sky-50 via-sky-100 to-blue-200" />
-
-      {/* Decorative elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        {/* Floating circles */}
-        <div className="absolute top-20 left-[10%] w-72 h-72 bg-blue-200/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 right-[15%] w-96 h-96 bg-sky-200/30 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-white/40 rounded-full blur-3xl" />
-
-        {/* Grid pattern */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.05)_1px,transparent_1px)] bg-[size:60px_60px]" />
-
-        {/* Floating particles */}
-        <div className="absolute top-1/4 right-1/4 w-2 h-2 bg-blue-400/40 rounded-full animate-pulse" />
-        <div className="absolute top-1/3 left-1/3 w-3 h-3 bg-sky-400/30 rounded-full animate-pulse" style={{ animationDelay: '0.5s' }} />
-        <div className="absolute bottom-1/3 right-1/3 w-2 h-2 bg-indigo-400/50 rounded-full animate-pulse" style={{ animationDelay: '1s' }} />
+    <div className="relative min-h-screen overflow-hidden bg-[var(--bg-main)]">
+      {/* Background Effects */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute top-[-10%] left-[-10%] h-[40rem] w-[40rem] rounded-full bg-blue-500/20 blur-[120px] dark:bg-blue-600/15" />
+        <div className="absolute bottom-[-10%] right-[-10%] h-[40rem] w-[40rem] rounded-full bg-sky-400/20 blur-[120px] dark:bg-sky-500/10" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(128,128,128,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(128,128,128,0.08)_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)]" />
       </div>
 
-      <div className="relative z-10 max-w-6xl mx-auto px-6 py-20 w-full">
-        {/* 尝试加载当前学习卡片，如果有活跃会话则显示 */}
-        <div className="mb-8">
-          <CurrentLearningCard />
+      {/* Hero Content */}
+      <section className="relative z-10 flex flex-col items-center pt-32 pb-20 text-center px-6 mx-auto max-w-7xl">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="inline-flex items-center gap-2 px-4 py-1.5 mb-8 rounded-full border border-[var(--border-color)] bg-[var(--bg-glass)] backdrop-blur-md text-sm font-medium text-[var(--accent)] shadow-sm"
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>全新 AI 学习引擎已上线</span>
+        </motion.div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="text-5xl md:text-7xl lg:text-[5.5rem] font-bold tracking-tight text-[var(--highlight)] mb-6 leading-tight"
+        >
+          重塑你的
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-sky-400 dark:from-blue-400 dark:to-cyan-300"> 学习体验</span>
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="max-w-2xl mx-auto text-lg md:text-xl text-[var(--text-secondary)] mb-10 leading-relaxed font-light"
+        >
+          通过人工智能驱动的个性化诊断、知识图谱与智能互动，打破传统学习边界，为你打造沉浸式的高效学习环境。
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="flex flex-wrap items-center justify-center gap-4 w-full mb-20"
+        >
+          <Link
+            href="/learning-setup"
+            className="group relative inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-8 py-4 text-base font-semibold text-white shadow-lg shadow-blue-500/25 transition-all hover:scale-105 hover:shadow-blue-500/40"
+          >
+            <Rocket className="h-5 w-5 transition-transform group-hover:-translate-y-1 group-hover:translate-x-1" />
+            开启学习之旅
+          </Link>
+          <Link
+            href="/unified-chat"
+            className="group inline-flex items-center gap-2 rounded-full border border-[var(--border-color)] bg-[var(--bg-glass)] px-8 py-4 text-base font-semibold text-[var(--text-primary)] backdrop-blur-md transition-all hover:bg-[var(--bg-card)] hover:border-blue-500/30"
+          >
+            AI 智能探索
+            <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+          </Link>
+        </motion.div>
+
+        {/* Dashboard Card Preview */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.4 }}
+          className="w-full max-w-4xl mx-auto relative"
+        >
+          <div className="absolute -inset-1 rounded-3xl bg-gradient-to-b from-blue-500/20 to-transparent blur-xl opacity-50 dark:opacity-30" />
+          <div className="relative rounded-3xl border border-[var(--border-color)] bg-[var(--bg-card)]/80 backdrop-blur-2xl shadow-2xl p-2 md:p-6 text-left">
+            <CurrentLearningCard />
+          </div>
+        </motion.div>
+      </section>
+
+      {/* Features Bento Grid */}
+      <section className="relative z-10 mx-auto max-w-7xl px-6 py-32">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl md:text-4xl font-bold text-[var(--highlight)] mb-4 tracking-tight">为什么选择学伴？</h2>
+          <p className="text-[var(--text-secondary)] text-lg max-w-2xl mx-auto font-light">结合最前沿的 AI 技术，提供全方位的学习辅助与反馈。</p>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left content */}
-          <div className="text-gray-900">
-            {/* Badge */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/60 backdrop-blur-sm border border-blue-100 mb-6 shadow-sm"
-            >
-              <Sparkles className="w-4 h-4 text-blue-500" />
-              <span className="text-sm font-medium">新一代 AI 智能学习系统</span>
-            </motion.div>
-
-            {/* Main title */}
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight"
-            >
-              智学引擎
-              <span className="block text-blue-600 mt-2">让学习更高效</span>
-            </motion.h1>
-
-            {/* Subtitle */}
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="text-lg md:text-xl text-gray-600 mb-8 leading-relaxed max-w-lg"
-            >
-              基于先进AI技术，精准诊断学习薄弱点，
-              智能生成个性化学习方案，助力每位学生高效自学。
-            </motion.p>
-
-            {/* CTA Buttons */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="flex flex-wrap gap-4 mb-10"
-            >
-              <Link
-                href="#quick-start"
-                className="inline-flex items-center gap-2 px-8 py-4 text-lg font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 hover:shadow-xl hover:-translate-y-0.5"
-              >
-                <Rocket className="w-5 h-5" />
-                开启高效提升
-              </Link>
-              <Link
-                href="/unified-chat"
-                className="inline-flex items-center gap-2 px-8 py-4 text-lg font-semibold bg-white/50 backdrop-blur-sm text-gray-700 border border-gray-200 rounded-xl hover:bg-white transition-all hover:shadow-md"
-              >
-                与老师对话
-              </Link>
-            </motion.div>
-
-            {/* Trust indicators */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.5 }}
-              className="flex flex-wrap items-center gap-6 text-sm text-gray-600"
-            >
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-blue-500" />
-                <span>覆盖K12全学段</span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Feature 1 */}
+          <div className="group relative overflow-hidden rounded-3xl border border-[var(--border-color)] bg-[var(--bg-card)] p-8 transition-all duration-300 hover:border-blue-500/30 hover:shadow-2xl hover:shadow-blue-500/10 md:col-span-2">
+            <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity duration-500 dark:opacity-10 dark:group-hover:opacity-20">
+              <BrainCircuit className="w-48 h-48 text-blue-500" />
+            </div>
+            <div className="relative z-10">
+              <div className="mb-6 inline-flex rounded-2xl bg-blue-500/10 p-3.5 text-blue-500 dark:bg-blue-500/20 dark:text-blue-400">
+                <BrainCircuit className="w-8 h-8" />
               </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-blue-500" />
-                <span>适配多版本教材</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-blue-500" />
-                <span>24小时专业助教</span>
-              </div>
-            </motion.div>
+              <h3 className="text-2xl font-bold text-[var(--highlight)] mb-3">AI 深度问答</h3>
+              <p className="text-[var(--text-secondary)] text-lg max-w-md leading-relaxed">
+                不仅是简单的问答，AI 能够理解你的学习进度，提供启发式的解答，引导你自主思考，掌握知识本质。
+              </p>
+            </div>
           </div>
 
-          {/* Right - Feature cards */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="hidden lg:block"
-          >
-            <div className="relative">
-              {/* Main feature card */}
-              <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl shadow-blue-200 p-8 relative z-10 border border-white/50">
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-sky-500 mb-4 shadow-lg shadow-blue-200">
-                    <Brain className="w-8 h-8 text-white" />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900">AI 核心能力</h3>
-                </div>
-
-                <div className="space-y-4">
-                  {features.map((feature, index) => (
-                    <motion.div
-                      key={feature.text}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.5 + index * 0.1 }}
-                      className="flex items-center gap-4 p-4 bg-gradient-to-r from-sky-50 to-blue-50 rounded-xl hover:from-sky-100 hover:to-blue-100 transition-colors"
-                    >
-                      <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-sky-500 flex items-center justify-center shadow-md shadow-blue-100">
-                        <feature.icon className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <div className="font-semibold text-gray-900">{feature.text}</div>
-                        <div className="text-sm text-gray-500">{feature.desc}</div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">100+</div>
-                    <div className="text-xs text-gray-500">知识点</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">9</div>
-                    <div className="text-xs text-gray-500">学科覆盖</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">24h</div>
-                    <div className="text-xs text-gray-500">在线服务</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Decorative cards */}
-              <div className="absolute -top-4 -right-4 w-full h-full bg-gradient-to-br from-sky-200/50 to-blue-200/50 rounded-3xl -z-10" />
-              <div className="absolute -top-8 -right-8 w-full h-full bg-gradient-to-br from-sky-100/50 to-blue-100/50 rounded-3xl -z-20" />
+          {/* Feature 2 */}
+          <div className="group relative overflow-hidden rounded-3xl border border-[var(--border-color)] bg-[var(--bg-card)] p-8 transition-all duration-300 hover:border-sky-500/30 hover:shadow-2xl hover:shadow-sky-500/10">
+            <div className="absolute bottom-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity duration-500 dark:opacity-10 dark:group-hover:opacity-20">
+              <Target className="w-32 h-32 text-sky-500" />
             </div>
-          </motion.div>
-        </div>
-      </div>
+            <div className="relative z-10">
+              <div className="mb-6 inline-flex rounded-2xl bg-sky-500/10 p-3.5 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400">
+                <Target className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-[var(--highlight)] mb-3">精准能力诊断</h3>
+              <p className="text-[var(--text-secondary)] leading-relaxed">
+                通过智能生成的极速诊断题，快速定位你的知识薄弱点，告别低效的题海战术。
+              </p>
+            </div>
+          </div>
 
-      {/* Wave bottom */}
-      <div className="absolute bottom-0 left-0 right-0">
-        <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full">
-          <path d="M0 120L60 110C120 100 240 80 360 70C480 60 600 60 720 65C840 70 960 80 1080 85C1200 90 1320 90 1380 90L1440 90V120H1380C1320 120 1200 120 1080 120C960 120 840 120 720 120C600 120 480 120 360 120C240 120 120 120 60 120H0Z" fill="#f8fafc"/>
-        </svg>
-      </div>
-    </section>
+          {/* Feature 3 */}
+          <div className="group relative overflow-hidden rounded-3xl border border-[var(--border-color)] bg-[var(--bg-card)] p-8 transition-all duration-300 hover:border-indigo-500/30 hover:shadow-2xl hover:shadow-indigo-500/10">
+            <div className="absolute bottom-0 left-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity duration-500 dark:opacity-10 dark:group-hover:opacity-20">
+              <Network className="w-32 h-32 text-indigo-500" />
+            </div>
+            <div className="relative z-10">
+              <div className="mb-6 inline-flex rounded-2xl bg-indigo-500/10 p-3.5 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400">
+                <Network className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-[var(--highlight)] mb-3">知识图谱构建</h3>
+              <p className="text-[var(--text-secondary)] leading-relaxed">
+                将零散的知识点结构化，形成清晰的个人知识网络，让学习轨迹一目了然。
+              </p>
+            </div>
+          </div>
+
+          {/* Feature 4 */}
+          <div className="group relative overflow-hidden rounded-3xl border border-[var(--border-color)] bg-[var(--bg-card)] p-8 transition-all duration-300 hover:border-blue-500/30 hover:shadow-2xl hover:shadow-blue-500/10 md:col-span-2 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
+            <div className="relative z-10 max-w-lg">
+              <h3 className="text-2xl font-bold text-[var(--highlight)] mb-3">沉浸式体验</h3>
+              <p className="text-[var(--text-secondary)] text-lg leading-relaxed mb-6">
+                支持优雅的深色模式、专注模式与极致排版，全方位保护视力，让你专注于探索知识本身。
+              </p>
+              <Link href="/learning-setup" className="text-[var(--accent)] font-semibold inline-flex items-center gap-1 hover:gap-2 transition-all">
+                立即体验 <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <div className="relative w-full md:w-64 h-40 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 border border-[var(--border-color)] shadow-inner overflow-hidden">
+               <div className="absolute top-4 left-4 right-4 h-3 bg-white/50 dark:bg-slate-700 rounded-full w-1/3" />
+               <div className="absolute top-10 left-4 right-4 h-3 bg-white/30 dark:bg-slate-700/50 rounded-full w-2/3" />
+               <div className="absolute bottom-4 right-4 w-12 h-12 bg-blue-500/20 dark:bg-blue-500/40 rounded-full flex items-center justify-center backdrop-blur-sm">
+                 <div className="w-6 h-6 bg-blue-500 rounded-full animate-pulse" />
+               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
   )
 }
