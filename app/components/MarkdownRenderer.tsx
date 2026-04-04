@@ -49,10 +49,13 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     <ErrorBoundary fallback={<div className="text-red-500 p-2 border border-red-200 rounded bg-red-50 text-sm">渲染内容出错，请查看控制台</div>}>
       <div className={`markdown-wrapper ${className} prose ${proseSize} prose-slate dark:prose-invert max-w-none break-words
           prose-headings:scroll-mt-24
-          prose-strong:font-semibold
+          prose-headings:font-semibold prose-headings:tracking-tight
+          prose-strong:font-semibold prose-strong:text-current
+          prose-em:italic prose-em:text-current prose-em:font-serif
+          prose-p:leading-relaxed prose-p:my-4
           prose-pre:p-0
-          prose-li:my-1
-          prose-ul:my-3 prose-ol:my-3
+          prose-li:my-1.5
+          prose-ul:my-4 prose-ol:my-4
           [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden [&_.katex-display]:py-2
           [&_ul]:list-disc [&_ul_ul]:list-circle [&_ul_ul_ul]:list-square
           [&_li]:leading-relaxed`}>

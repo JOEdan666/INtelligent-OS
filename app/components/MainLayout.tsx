@@ -9,6 +9,8 @@ import { useThemeMode } from '../providers/ThemeProvider'
 
 const NAV_ITEMS = [
   { key: '/', label: '主页' },
+  { key: '/validator', label: '验证新想法' },
+  { key: '/dashboard', label: 'Idea 点子库' },
   { key: '/learning-setup', label: '开始学习' },
   { key: '/unified-chat', label: 'AI 对话' },
   { key: '/learning-history', label: '学习档案' },

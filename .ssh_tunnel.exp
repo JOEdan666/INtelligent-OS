@@ -1,0 +1,6 @@
+#!/usr/bin/expect -f
+set password "Lyc001286"
+spawn ssh -o StrictHostKeyChecking=no -N -L 5432:pgm-wz9e83um4mxsop2yvo.pg.rds.aliyuncs.com:5432 root@120.24.22.244
+expect "password:"
+send "$password\r"
+expect eof

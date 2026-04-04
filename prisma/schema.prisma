@@ -392,3 +392,28 @@ model Visit {
   ip        String?
   userAgent String?  @db.Text
 }
+
+// --- Idea Validator Models ---
+
+model IdeaValidation {
+  id              String   @id @default(cuid())
+  userId          String   // Corresponds to Clerk User ID
+  
+  originalIdea    String   @db.Text
+  refinedIdea     String?  @db.Text // Idea after clarification chat
+  
+  score           Int      @default(0)
+  verdict         String   @db.Text
+  reportJson      Json     // The complete generated report
+  
+  status          String   @default("VALIDATED") // VALIDATED, BUILDING, DROPPED, LAUNCHED
+  isPublic        Boolean  @default(false) // If true, shows up on the Idea Wall
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([score])
+  @@map("idea_validations")
+}
