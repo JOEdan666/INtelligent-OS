@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -10,16 +10,25 @@ import { ChatMessage } from '../utils/chatTypes';
 import { toast } from 'react-hot-toast';
 import LearningProgressClient from '../services/learningProgressClient';
 import { LearningState } from '../types/learning';
-import { CurriculumService } from '../services/curriculumService';
 import RegionalCurriculumSelector from '../components/RegionalCurriculumSelector';
 import { KnowledgeBaseService } from '../services/knowledgeBaseService';
 
-const STEP_FLOW: Array<{ key: LearningState; label: string; desc: string }> = [
-  { key: 'DIAGNOSE', label: '诊断', desc: '极速测验定位薄弱点' },
-  { key: 'ANALYSIS', label: '分析', desc: '生成诊断报告' },
-  { key: 'REMEDY', label: '补漏', desc: '针对性微课讲解' },
-  { key: 'VERIFY', label: '验证', desc: '变式题确认掌握' },
+type LearningMode = 'guide' | 'workshop' | 'quiz';
+
+const LEARNING_MODES: Array<{ key: LearningMode; label: string; desc: string }> = [
+  { key: 'guide', label: 'AI 带学', desc: '讲清楚、随时追问，不强制做题' },
+  { key: 'workshop', label: '实战共创', desc: '围绕你的真实问题，一步步做出结果' },
+  { key: 'quiz', label: '测验查漏', desc: '需要检验时再做 3 道题' },
 ];
+
+function inferLearningMode(goal: string, topic: string, requestedMode: string | null): LearningMode {
+  if (requestedMode === 'guide' || requestedMode === 'workshop' || requestedMode === 'quiz') {
+    return requestedMode;
+  }
+
+  const practicalTopic = /(如何|怎么|怎样|痛点|方案|设计|规划|决策|分析|解决|改进|运营|创业|产品|实践|实操)/;
+  return goal === 'apply' || practicalTopic.test(topic) ? 'workshop' : 'guide';
+}
 
 // 动态导入组件以避免SSR问题
 const ExplainStep = dynamic(() => import('../components/LearningFlow/ExplainStep'), { ssr: false });
@@ -35,12 +44,16 @@ function LearningInterfaceContent() {
   const grade = searchParams.get('grade') || '';
   const semester = searchParams.get('semester') || ''; // 读取学期参数
   const topicId = searchParams.get('topicId') || '';
+  const learningGoal = searchParams.get('goal') || 'understand';
+  const learningContext = searchParams.get('context') || '';
   const existingConversationId = searchParams.get('conversationId');
+  const initialLearningMode = inferLearningMode(learningGoal, topic, searchParams.get('mode'));
   
   const [learningContent, setLearningContent] = useState(''); // 基础学习内容
   const [aiExplanation, setAiExplanation] = useState(''); // AI讲解内容
   const [isLoading, setIsLoading] = useState(false); // 默认为 false，因为我们直接开始
-  const [currentStep, setCurrentStep] = useState<LearningState>('DIAGNOSE'); // 默认为 DIAGNOSE
+  const [learningMode, setLearningMode] = useState<LearningMode>(initialLearningMode);
+  const [currentStep, setCurrentStep] = useState<LearningState>(initialLearningMode === 'quiz' ? 'DIAGNOSE' : 'REMEDY');
   const [conversationId, setConversationId] = useState<string | null>(existingConversationId);
   const [hasManualSave, setHasManualSave] = useState(false);
   const [isRestoredSession, setIsRestoredSession] = useState(false);
@@ -58,6 +71,7 @@ function LearningInterfaceContent() {
   const [quizResults, setQuizResults] = useState<any>(null);
   const [aiSummary, setAiSummary] = useState(''); // AI学习总结
   const [showSummaryModal, setShowSummaryModal] = useState(false); // 控制总结弹窗显示
+  const initializationKeyRef = useRef('');
   
   // 苏格拉底对话状态
   const [socraticDialogue, setSocraticDialogue] = useState<Array<{
@@ -65,8 +79,6 @@ function LearningInterfaceContent() {
     answer: string;
     feedback?: string;
   }>>([]);
-  const currentStepIndex = STEP_FLOW.findIndex(s => s.key === currentStep);
-  
   const conversationService = ConversationService.getInstance();
 
   // 更新苏格拉底对话
@@ -85,7 +97,10 @@ function LearningInterfaceContent() {
 
   useEffect(() => {
     if (subject && topic) {
-      initializeLearningSession();
+      const initializationKey = `${existingConversationId || 'new'}|${subject}|${topic}`;
+      if (initializationKeyRef.current === initializationKey) return;
+      initializationKeyRef.current = initializationKey;
+      void initializeLearningSession();
     } else {
       setIsLoading(false);
     }
@@ -169,7 +184,9 @@ function LearningInterfaceContent() {
          if (conversation.learningSession) {
            try {
              // 从LearningSession恢复基本状态
-             setCurrentStep((conversation.learningSession.state as LearningState) || 'DIAGNOSE');
+             if (initialLearningMode === 'quiz') {
+               setCurrentStep((conversation.learningSession.state as LearningState) || 'DIAGNOSE');
+             }
              
              // 尝试从学习进度数据库恢复完整学习数据
              try {
@@ -179,7 +196,7 @@ function LearningInterfaceContent() {
                  const stats = completeLearningData.stats;
                  
                  // 设置当前步骤
-                 if (learningProgress.currentStep) {
+                 if (initialLearningMode === 'quiz' && learningProgress.currentStep) {
                    setCurrentStep(learningProgress.currentStep as LearningState);
                  }
                  
@@ -258,24 +275,21 @@ function LearningInterfaceContent() {
   };
 
   // 生成AI学习内容
-  const generateLearningContent = async () => {
+  const generateLearningContent = async (modeOverride: LearningMode = learningMode) => {
     try {
       setIsLoading(true);
-      // 1) 优先使用知识库教材内容（更科学、专业）
+      let knowledgeReference = '';
+      // 优先把相关资料作为依据，但仍由 AI 组织成针对性微课
       try {
         const kb = new KnowledgeBaseService();
         const items = await kb.getItems();
         const keyword = (topic || '').slice(0, 20);
-        const subjectHint = subject || '';
         const matched = items.filter(it => (it.text || '').includes(keyword) || (it.name || '').includes(keyword));
         if (matched.length > 0) {
-          const merged = matched.slice(0, 4).map(it => `### ${it.name}\n\n${(it.text || '').slice(0, 3000)}`).join('\n\n');
-          const header = `## ${subjectHint} · ${topic}\n\n${selectedRegion || region || '通用'} · ${grade || ''}`;
-          const kbContent = `${header}\n\n${merged}`;
-          setLearningContent(kbContent);
-          setAiExplanation(kbContent);
-          setIsLoading(false);
-          return;
+          knowledgeReference = matched
+            .slice(0, 2)
+            .map(it => `${it.name}：${(it.text || '').slice(0, 500)}`)
+            .join('\n\n');
         }
       } catch (e) {
         console.warn('知识库内容不可用，降级使用AI生成:', e);
@@ -284,98 +298,49 @@ function LearningInterfaceContent() {
       const aiProvider = createProviderFromEnv();
       if (!aiProvider) throw new Error('AI服务不可用');
 
-      // 获取教学大纲指导
-      const curriculumService = CurriculumService.getInstance();
-      const currentRegion = selectedRegion || region;
-      const curriculumStandard = curriculumService.getCurriculumStandard(currentRegion, grade, subject);
-      const topicRequirementsData = curriculumService.getTopicRequirements(currentRegion, grade, subject, topic);
-      const difficulty = curriculumService.getTopicDifficulty(currentRegion, grade, subject, topic);
-      const examWeight = curriculumService.getTopicExamWeight(currentRegion, grade, subject, topic);
-      const learningGuidance = curriculumService.generateLearningGuidance(currentRegion, grade, subject, topic);
+      const goalInstruction = {
+        understand: '优先建立清晰心智模型，并要求学习者能用自己的话解释。',
+        remember: '优先提炼关键事实，并设计主动回忆线索帮助长期记忆。',
+        apply: '优先连接真实任务，给出可执行练习和下一步行动。',
+      }[learningGoal] || '优先建立清晰心智模型，并要求学习者能用自己的话解释。';
 
-      const prompt = `你是一位专业的AI学习教练，具有深厚的学科知识和丰富的教学经验。你的使命是帮助学生建立完整的知识体系，培养深度思维能力和问题解决能力。
+      const diagnosticSummary = quizResults?.questions?.slice(0, 3).map((question: any, index: number) => {
+        const userAnswer = quizResults.answers?.[index] || '未作答';
+        return `${index + 1}. ${String(question.question).slice(0, 180)}\n用户答案：${userAnswer}\n参考答案：${question.correctAnswer || '开放题'}`;
+      }).join('\n\n') || '暂无诊断结果，请围绕主题最常见的理解障碍讲解。';
 
-## 🎯 教学目标
-- **知识目标**：确保学生准确掌握核心概念和基本原理
-- **能力目标**：培养学生的分析思维、逻辑推理和应用能力
-- **素养目标**：提升学生的学科素养和创新思维
+      const prompt = modeOverride === 'workshop'
+        ? `你是我的 AI 共创教练。不要把“${topic}”讲成一篇课程，也不要出题考试；和我一起解决真实问题并产出可使用的结果。
 
-## 📚 内容要求
+主题：${topic}
+领域：${subject || '通用'}
+我想达到的目标：${goalInstruction}
+我的背景或材料：${(learningContext || '暂未提供').slice(0, 1200)}
+${knowledgeReference ? `可参考的个人资料：\n${knowledgeReference}` : ''}
 
-### 🔍 核心内容（必须包含）
-1. **概念定义**：准确、清晰的概念表述
-2. **知识背景**：概念的来源、发展历程和重要意义
-3. **核心原理**：基本原理、定理、公式的详细阐述
-4. **逻辑关系**：知识点之间的内在联系和逻辑结构
+请这样开始：
+1. 用一句话复述我们要解决的真实问题，并明确本轮产出。
+2. 给出最多 3 步的推进方法，但本轮只展开第 1 步。
+3. 直接提供一个可填写的模板、判断标准或初稿，让我能马上补充和修改。
+4. 最后只问 1 个决定下一步的具体问题，等待我回答后再继续。
+5. 不要考试、不要空泛讲理论、不要一次性给出大而全的方案。控制在 300—500 个汉字。`
+        : `请直接为我讲一节短而有效的微课。
 
-### 💡 理解深化（重点强化）
-1. **本质理解**：揭示概念的本质特征和内在规律
-2. **多角度分析**：从不同维度解读知识点
-3. **类比联想**：运用生活实例和类比帮助理解
-4. **思维导图**：构建知识网络和思维框架
+主题：${topic}
+领域：${subject || '通用'}
+学习目标：${goalInstruction}
+当前背景：${(learningContext || '未提供').slice(0, 500)}
+诊断结果：
+${diagnosticSummary}
+${knowledgeReference ? `\n可参考的个人资料：\n${knowledgeReference}` : ''}
 
-### 🎯 应用拓展（能力提升）
-1. **典型例题**：精选代表性例题，展示解题思路
-2. **方法技巧**：总结解题方法和思维策略
-3. **实际应用**：展示知识在现实生活中的应用
-4. **拓展延伸**：相关知识点的扩展和深化
-
-### ⚠️ 易错防范（质量保证）
-1. **常见误区**：指出学习中容易出现的错误
-2. **辨析对比**：对比相似概念，避免混淆
-3. **注意事项**：提醒学习和应用中的关键点
-4. **自检方法**：提供自我检验的方法和标准
-
-## 🎨 表达要求
-
-### 📝 语言风格
-- **准确性**：用词精确，表述严谨，避免歧义
-- **生动性**：语言生动有趣，富有感染力
-- **启发性**：多用问题引导，激发思考
-- **个性化**：根据${grade || '中学'}学生特点调整表达
-
-### 📐 结构组织
-- **层次清晰**：使用标题、列表、表格等组织内容
-- **重点突出**：用**加粗**、*斜体*等强调关键信息
-- **逻辑连贯**：确保各部分之间逻辑关系明确
-- **视觉友好**：适当使用emoji和符号增强可读性
-
-### 🎚️ 深度控制
-- **基础扎实**：确保基础概念准确无误
-- **适度拓展**：在学生能力范围内适当延伸
-- **循序渐进**：从简单到复杂，层层递进
-- **因材施教**：考虑${grade || '中学'}学生的认知水平
-
-## 📋 质量标准
-
-### ✅ 内容质量
-- **科学准确**：所有知识点必须科学准确，经得起检验
-- **完整系统**：覆盖主题的核心要点，形成完整体系
-- **深度适宜**：既有深度又不超出学生理解能力
-- **实用有效**：对学生的学习和考试有实际帮助
-
-### 🎯 教学效果
-- **易于理解**：表述清晰，学生容易理解和掌握
-- **便于记忆**：结构清晰，要点突出，便于记忆
-- **启发思考**：能够激发学生的思考和探索欲望
-- **促进应用**：帮助学生将知识转化为解决问题的能力
-
-## 📖 具体任务
-请基于以上要求，对"${topic}"这一主题进行系统化、专业化的讲解。
-
-**学习背景：**
-- 学科：${subject || '数学'}
-- 年级：${grade || '中学'}
-- 地区：${selectedRegion || region || '通用'}
-
-**特别要求：**
-1. 确保内容的科学性和准确性
-2. 体现${selectedRegion || region || '通用'}地区的教学特色
-3. 适合${grade || '中学'}学生的认知水平
-4. 提供丰富的例题和应用实例
-5. 构建完整的知识体系和思维框架
-
-请开始你的专业讲解：`;
+要求：
+1. 先用两句话给出核心结论，不要先反问。
+2. 只讲 3 个最关键的概念或步骤，优先纠正诊断中暴露的问题。
+3. 给 1 个贴近真实使用场景的例子，并展示推理过程。
+4. 指出 1 个最容易混淆的点。
+5. 最后给 1 个主动回忆问题，不要附答案。
+6. 使用清晰的 Markdown，控制在 350—550 个汉字，不写历史沿革、空泛鼓励或大而全的知识目录。`;
 
       // 流式获取AI内容，首段即显示，加速体感
       const content = await new Promise<string>((resolve, reject) => {
@@ -395,7 +360,11 @@ function LearningInterfaceContent() {
           }
         });
         aiProvider.onError((error: string) => reject(new Error(error)));
-        aiProvider.sendMessage(prompt);
+        void aiProvider.sendMessage(prompt, undefined, {
+          purpose: modeOverride === 'workshop' ? 'qa' : 'lecture',
+          maxTokens: 750,
+          temperature: modeOverride === 'workshop' ? 0.45 : 0.4,
+        });
       });
 
       if (!content || !content.trim()) throw new Error('AI返回空内容');
@@ -444,6 +413,41 @@ function LearningInterfaceContent() {
     }
   };
 
+  const handleModeChange = async (nextMode: LearningMode) => {
+    setLearningMode(nextMode);
+
+    if (nextMode === 'quiz') {
+      setCurrentStep('DIAGNOSE');
+      return;
+    }
+
+    setCurrentStep('REMEDY');
+    if (nextMode !== learningMode || !learningContent) {
+      setLearningContent('');
+      await generateLearningContent(nextMode);
+    }
+  };
+
+  const handleFinishLearning = async () => {
+    setCurrentStep('DONE');
+    toast.success('已保存这次学习，不需要跑完固定流程');
+
+    if (!conversationId) return;
+    try {
+      await LearningProgressClient.saveLearningProgress({
+        conversationId,
+        subject,
+        topic,
+        aiExplanation,
+        socraticDialogue,
+        currentStep: 'DONE',
+        isCompleted: true,
+      });
+    } catch (error) {
+      console.error('保存学习完成状态失败:', error);
+    }
+  };
+
   const handleNext = async () => {
     console.log('进入下一步学习，当前步骤:', currentStep);
     
@@ -454,15 +458,17 @@ function LearningInterfaceContent() {
         toast.success('查看测验结果');
         break;
       case 'ANALYSIS':
+        setLearningMode('guide');
         setCurrentStep('REMEDY');
         if (!learningContent) {
-          generateLearningContent();
+          generateLearningContent('guide');
         }
-        toast.success('进入知识补漏');
+        toast.success('切换到 AI 带学');
         break;
       case 'REMEDY':
-        setCurrentStep('VERIFY');
-        toast.success('进入验证阶段');
+        setLearningMode('quiz');
+        setCurrentStep('DIAGNOSE');
+        toast.success('按你的选择进入测验');
         break;
       case 'VERIFY':
         toast.success('学习完成！');
@@ -576,11 +582,12 @@ function LearningInterfaceContent() {
   // 处理结果查看完成
   const handleResultNext = async () => {
     console.log('结果查看完成');
+    setLearningMode('guide');
     setCurrentStep('REMEDY');
     if (!learningContent) {
-      generateLearningContent();
+      generateLearningContent('guide');
     }
-    toast.success('进入知识补漏');
+    toast.success('根据结果继续 AI 带学');
   };
 
   // 处理复习完成
@@ -716,21 +723,23 @@ function LearningInterfaceContent() {
                 查看总结
               </button>
             )}
-            <button
-              onClick={async () => {
-                setIsLoading(true);
-                try {
-                  await generateLearningContent();
-                  toast.success('AI讲解内容已重新生成');
-                } catch (error) {
-                  console.error('重新生成失败:', error);
-                  toast.error('重新生成失败，请稍后重试');
-                }
-              }}
-              className="px-3 py-2 rounded-lg border border-sky-100 bg-white text-sky-700 text-sm font-semibold hover:bg-sky-50 shadow-sm"
-            >
-              重新生成
-            </button>
+            {learningMode !== 'quiz' && (
+              <button
+                onClick={async () => {
+                  setIsLoading(true);
+                  try {
+                    await generateLearningContent(learningMode);
+                    toast.success(learningMode === 'workshop' ? '共创起点已重新生成' : 'AI 讲解已重新生成');
+                  } catch (error) {
+                    console.error('重新生成失败:', error);
+                    toast.error('重新生成失败，请稍后重试');
+                  }
+                }}
+                className="px-3 py-2 rounded-lg border border-sky-100 bg-white text-sky-700 text-sm font-semibold hover:bg-sky-50 shadow-sm"
+              >
+                重新生成
+              </button>
+            )}
             <button
               onClick={handleManualSave}
               disabled={isSaving}
@@ -747,14 +756,14 @@ function LearningInterfaceContent() {
         {/* 概览卡 */}
         <div className="zen-panel p-5 flex flex-wrap gap-4 items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs text-sky-700 font-semibold uppercase tracking-wide">系统化学习</p>
-            <h1 className="text-2xl font-bold">专注当前主题 · 提升效率</h1>
-            <p className="text-sm text-slate-600">AI 讲解 → 理解确认 → 测验 → 结果 → 复盘，全程自动记录。</p>
+            <p className="text-xs text-sky-700 font-semibold uppercase tracking-wide">自适应学习</p>
+            <h1 className="text-2xl font-bold">按问题学习，不跑固定流程</h1>
+            <p className="text-sm text-slate-600">AI 会根据主题带学或共创；测验只是需要时使用的工具。</p>
           </div>
           <div className="flex items-center gap-4 text-sm">
             <div className="px-3 py-2 rounded-xl bg-slate-100">
-              <div className="text-xs text-slate-500">当前阶段</div>
-              <div className="font-semibold">{STEP_FLOW.find(s => s.key === currentStep)?.label || '讲解'}</div>
+              <div className="text-xs text-slate-500">当前模式</div>
+              <div className="font-semibold">{LEARNING_MODES.find(mode => mode.key === learningMode)?.label}</div>
             </div>
             <div className="px-3 py-2 rounded-xl bg-slate-100">
               <div className="text-xs text-slate-500">进度保存</div>
@@ -767,36 +776,39 @@ function LearningInterfaceContent() {
           </div>
         </div>
 
-        {/* 流程步骤指示 */}
-        <div className="zen-panel p-4 flex flex-wrap gap-3">
-          {STEP_FLOW.map((step, idx) => {
-            const active = currentStepIndex === idx;
-            const done = currentStepIndex > idx;
+        {/* 学习模式切换 */}
+        <div className="zen-panel p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="font-semibold text-slate-900">选择现在最有用的学习方式</div>
+              <div className="text-xs text-slate-500">可以随时切换，也可以随时结束。</div>
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+          {LEARNING_MODES.map((mode) => {
+            const active = learningMode === mode.key;
             return (
-              <div
-                key={step.key}
-                className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl border text-sm ${
+              <button
+                key={mode.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => void handleModeChange(mode.key)}
+                className={`rounded-xl border px-4 py-3 text-left text-sm transition ${
                   active
-                    ? 'border-sky-500 bg-gradient-to-r from-sky-500 to-blue-600 text-white'
-                    : done
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : 'border-slate-200 bg-slate-50 text-slate-600'
+                    ? 'border-sky-500 bg-sky-50 text-sky-900 ring-2 ring-sky-100'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:bg-sky-50/50'
                 }`}
               >
-                <div className="font-semibold flex items-center gap-2">
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold border border-current">
-                    {idx + 1}
-                  </span>
-                  {step.label}
-                </div>
-                <div className="text-xs mt-1">{step.desc}</div>
-              </div>
+                <div className="font-semibold">{mode.label}</div>
+                <div className="mt-1 text-xs leading-5 opacity-80">{mode.desc}</div>
+              </button>
             );
           })}
+          </div>
         </div>
 
         {/* 考纲选择器 */}
-        <div className="zen-panel p-4">
+        {grade && subject !== '个人学习' && <div className="zen-panel p-4">
           <RegionalCurriculumSelector
             selectedRegion={selectedRegion}
             selectedCurriculum={selectedCurriculum}
@@ -817,7 +829,7 @@ function LearningInterfaceContent() {
             subject={subject}
             grade={grade}
           />
-        </div>
+        </div>}
 
         {/* 学习流程内容 */}
       <div className="zen-panel shadow-lg overflow-hidden">
@@ -827,6 +839,9 @@ function LearningInterfaceContent() {
                 content={learningContent}
                 initialAiExplanation={aiExplanation}
                 onNext={handleNext}
+                onPractice={() => void handleModeChange('quiz')}
+                onFinish={() => void handleFinishLearning()}
+                learningMode={learningMode === 'workshop' ? 'workshop' : 'guide'}
                 onAskQuestion={handleAskQuestion}
                 step="REMEDY"
                 socraticDialogue={socraticDialogue}
@@ -901,6 +916,26 @@ function LearningInterfaceContent() {
                 conversationId={conversationId || undefined}
                 grade={grade}
               />
+            )}
+
+            {currentStep === 'DONE' && (
+              <div className="mx-auto max-w-2xl py-12 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-700">✓</div>
+                <h2 className="mt-5 text-2xl font-bold text-slate-900">这次先学到这里</h2>
+                <p className="mt-2 text-slate-600">内容和对话已经保存。学习不需要为了完成流程而继续。</p>
+                <div className="mt-7 flex flex-wrap justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleModeChange(learningMode === 'quiz' ? 'guide' : learningMode)}
+                    className="zen-button px-5 py-3"
+                  >
+                    继续这个主题
+                  </button>
+                  <Link href="/learning-setup" className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-medium text-slate-700 hover:bg-slate-50">
+                    学另一个问题
+                  </Link>
+                </div>
+              </div>
             )}
           </div>
         </div>

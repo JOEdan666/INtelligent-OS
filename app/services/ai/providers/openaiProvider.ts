@@ -1,4 +1,4 @@
-import { AIProvider, ChatMessage } from '../types'
+import { AIProvider, AIRequestOptions, ChatMessage } from '../types'
 
 export class OpenAIProvider implements AIProvider {
   private messageHandler: ((message: string, isFinal: boolean) => void) | null = null
@@ -13,27 +13,25 @@ export class OpenAIProvider implements AIProvider {
     this.errorHandler = handler
   }
 
-  async sendMessage(query: string, history?: ChatMessage[]): Promise<void> {
+  async sendMessage(query: string, history?: ChatMessage[], options?: AIRequestOptions): Promise<void> {
+    let timeoutId: number | undefined
     try {
-      console.log('[OpenAIProvider] 发送消息:', query);
-      console.log('[OpenAIProvider] 历史消息:', history);
-      
-      // 创建fetch选项 - 使用API期望的格式
-      const fetchOptions = {
+      const controller = new AbortController()
+      timeoutId = window.setTimeout(() => controller.abort(), 30_000)
+      const startedAt = performance.now()
+      const fetchOptions: RequestInit = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          query: query,
-          history: history || []
+          query,
+          history: history || [],
+          purpose: options?.purpose || 'chat',
+          max_tokens: options?.maxTokens,
+          temperature: options?.temperature,
         }),
+        signal: controller.signal,
       };
-      
-      console.log('[OpenAIProvider] 发送请求到:', '/api/openai-chat?stream=1');
-      console.log('[OpenAIProvider] 请求选项:', fetchOptions);
-      
-      const resp = await fetch('/api/openai-chat?stream=1', fetchOptions);
-
-      console.log('[OpenAIProvider] 收到响应状态:', resp.status);
+      const resp = await fetch('/api/openai-chat?stream=1', fetchOptions)
       
       if (!resp.ok) {
         const status = resp.status
@@ -77,12 +75,9 @@ export class OpenAIProvider implements AIProvider {
 
       // 如果返回的是 JSON（非流式回退），保持一次性返回
       const ct = resp.headers.get('content-type') || ''
-      console.log('[OpenAIProvider] 响应内容类型:', ct);
-      
       if (ct.includes('application/json')) {
         const data = await resp.json()
         const content = data?.content || ''
-        console.log('[OpenAIProvider] 非流式响应内容:', content);
         this.messageHandler?.(content, true)
         return
       }
@@ -95,7 +90,6 @@ export class OpenAIProvider implements AIProvider {
         return
       }
       
-      console.log('[OpenAIProvider] 开始读取流式响应');
       let done = false
       let totalContent = ''
       let receivedChunks = 0
@@ -109,14 +103,8 @@ export class OpenAIProvider implements AIProvider {
             const chunk = decoder.decode(value, { stream: true })
             receivedChunks++
             
-            // 添加调试信息，记录每个数据块
-            console.log(`[OpenAIProvider] 收到数据块 #${receivedChunks}:`, chunk);
-            
             totalContent += chunk
-            
-            // 确保messageHandler存在且不为空字符串
             if (this.messageHandler && chunk.length > 0) {
-              console.log(`[OpenAIProvider] 调用messageHandler，内容长度: ${chunk.length}`);
               this.messageHandler(chunk, false)
             }
           } catch (decodeError) {
@@ -125,16 +113,20 @@ export class OpenAIProvider implements AIProvider {
         }
       }
       
-      console.log('[OpenAIProvider] 流式响应完成，总内容:', totalContent);
-      console.log('[OpenAIProvider] 总共接收数据块数量:', receivedChunks);
-      
-      // 发送最终消息（即使是空的）
+      console.info('[OpenAIProvider] 完成', {
+        purpose: options?.purpose || 'chat',
+        durationMs: Math.round(performance.now() - startedAt),
+        contentLength: totalContent.length,
+        chunks: receivedChunks,
+      })
       if (this.messageHandler) {
         this.messageHandler('', true)
       }
     } catch (e: any) {
       console.error('[OpenAIProvider] 发生错误:', e);
-      this.errorHandler?.(e?.message || '网络错误')
+      this.errorHandler?.(e?.name === 'AbortError' ? '回答超时，请重试' : e?.message || '网络错误')
+    } finally {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
     }
   }
 

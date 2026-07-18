@@ -62,11 +62,13 @@ export default function SubjectRadar({ data, height = 300 }: SubjectRadarProps) 
             tickFormatter={(value) => `${value}`}
           />
           <Tooltip
-            formatter={(value: number, name: string) => {
-              if (name === '错题量') return [`${value}%`, name]
-              if (name === '掌握率') return [`${value}%`, name]
-              if (name === '正确率') return [`${value}%`, name]
-              return [value, name]
+            formatter={(value: number | undefined, name: string | undefined) => {
+              const safeValue = value ?? 0
+              const safeName = name || '指标'
+              if (safeName === '错题量') return [`${safeValue}%`, safeName]
+              if (safeName === '掌握率') return [`${safeValue}%`, safeName]
+              if (safeName === '正确率') return [`${safeValue}%`, safeName]
+              return [safeValue, safeName]
             }}
             contentStyle={{
               borderRadius: '8px',

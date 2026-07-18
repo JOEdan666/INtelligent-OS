@@ -28,10 +28,6 @@ const nextConfig = {
     return config;
   },
 
-  // 临时忽略类型错误，以便部署
-  typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
-
   // 实验性功能
   experimental: { esmExternals: 'loose' },
 };

@@ -14,7 +14,10 @@ if (process.env.NODE_ENV !== 'production') {
   globalForDbFallback.dbFallbackState = fallbackState;
 }
 
+// 本地 JSON 仅用于开发。生产环境必须暴露数据库故障，避免把 /tmp 临时文件
+// 误当成可靠持久化并向用户返回“保存成功”。
 export const MEMORY_FALLBACK_ENABLED =
+  process.env.NODE_ENV !== 'production' &&
   (process.env.ENABLE_MEMORY_DB_FALLBACK || 'true').toLowerCase() === 'true';
 
 const devDatabaseMode = (process.env.DEV_DATABASE_MODE || 'local').toLowerCase();

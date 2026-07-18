@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { auth } from '@clerk/nextjs/server';
 
 // 知识点掌握度数据结构
 interface TopicMastery {
@@ -24,6 +25,9 @@ interface SubjectMastery {
 
 export async function GET(request: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) return NextResponse.json({ success: false, error: '请先登录' }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const subject = searchParams.get('subject');
     const grade = searchParams.get('grade');
@@ -36,6 +40,7 @@ export async function GET(request: NextRequest) {
     // 查询学习会话和答题记录
     const sessions = await prisma.learningSession.findMany({
       where: {
+        userId,
         createdAt: { gte: startDate },
         ...(subject && { subject }),
         ...(grade && { grade }),

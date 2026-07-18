@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, type PieLabelRenderProps } from 'recharts'
 import { ERROR_TYPE_LABELS, ERROR_TYPE_COLORS, ErrorType } from '@/app/types/wrongQuestion'
 
 interface ErrorTypeDistributionProps {
@@ -30,14 +30,13 @@ export default function ErrorTypeDistribution({ data, height = 280 }: ErrorTypeD
 
   const COLORS = chartData.map(item => ERROR_TYPE_COLORS[item.type])
 
-  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: {
-    cx: number
-    cy: number
-    midAngle: number
-    innerRadius: number
-    outerRadius: number
-    percent: number
-  }) => {
+  const renderCustomLabel = (props: PieLabelRenderProps) => {
+    const cx = Number(props.cx || 0)
+    const cy = Number(props.cy || 0)
+    const midAngle = Number(props.midAngle || 0)
+    const innerRadius = Number(props.innerRadius || 0)
+    const outerRadius = Number(props.outerRadius || 0)
+    const percent = Number(props.percent || 0)
     if (percent < 0.05) return null
     const RADIAN = Math.PI / 180
     const radius = innerRadius + (outerRadius - innerRadius) * 0.5
@@ -79,7 +78,7 @@ export default function ErrorTypeDistribution({ data, height = 280 }: ErrorTypeD
             ))}
           </Pie>
           <Tooltip
-            formatter={(value: number, name: string) => [`${value} 题`, name]}
+            formatter={(value: number | undefined, name: string | undefined) => [`${value ?? 0} 题`, name || '数量']}
             contentStyle={{
               borderRadius: '8px',
               border: 'none',

@@ -155,7 +155,7 @@ export default function TodayPage() {
                   {/* User Input */}
                   {session.userInput && (
                     <div className="text-sm text-gray-600 mb-3 bg-gray-50 p-2 rounded">
-                      "{session.userInput}"
+                      “{session.userInput}”
                     </div>
                   )}
 

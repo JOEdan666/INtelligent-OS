@@ -89,6 +89,7 @@ type LearningStatsRecord = {
 
 type LearningItemRecord = {
   id: string;
+  userId?: string | null;
   text: string;
   subject: string;
   createdAt: string;
@@ -96,6 +97,7 @@ type LearningItemRecord = {
 
 type KnowledgeBaseItemRecord = {
   id: string;
+  userId?: string | null;
   name: string;
   type: string;
   size: number;
@@ -140,6 +142,22 @@ type NoteBlockRecord = {
   updatedAt: string;
 };
 
+type ReviewCardRecord = {
+  id: string;
+  userId: string;
+  sourceSessionId?: string | null;
+  subject: string;
+  topic: string;
+  prompt: string;
+  answer: string;
+  stage: number;
+  nextReviewAt: string;
+  lastReviewedAt?: string | null;
+  reviewCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type LocalFallbackState = {
   conversations: ConversationRecord[];
   learningSessions: LearningSessionRecord[];
@@ -150,6 +168,7 @@ type LocalFallbackState = {
   knowledgeBaseItems: KnowledgeBaseItemRecord[];
   notes: NoteRecord[];
   noteBlocks: NoteBlockRecord[];
+  reviewCards: ReviewCardRecord[];
 };
 
 const DB_DIR = process.env.VERCEL
@@ -167,6 +186,7 @@ const createDefaultState = (): LocalFallbackState => ({
   knowledgeBaseItems: [],
   notes: [],
   noteBlocks: [],
+  reviewCards: [],
 });
 
 const globalForMemoryDB = global as unknown as { memoryDB: MemoryDB };
@@ -540,8 +560,10 @@ class MemoryDB {
     return this.clone(createdAnswers);
   }
 
-  async getLearningProgress(conversationId: string) {
-    const session = this.state.learningSessions.find((item) => item.conversationId === conversationId);
+  async getLearningProgress(conversationId: string, userId?: string) {
+    const session = this.state.learningSessions.find(
+      (item) => item.conversationId === conversationId && (!userId || item.userId === userId),
+    );
     if (!session) {
       return null;
     }
@@ -549,14 +571,16 @@ class MemoryDB {
     return this.clone(this.buildLearningSession(session));
   }
 
-  async getLearningStats(conversationId: string) {
-    const stats = this.state.learningStats.find((item) => item.conversationId === conversationId);
+  async getLearningStats(conversationId: string, userId?: string) {
+    const stats = this.state.learningStats.find(
+      (item) => item.conversationId === conversationId && (!userId || item.userId === userId),
+    );
     return stats ? this.clone(stats) : null;
   }
 
-  async getCompleteLearningData(conversationId: string) {
-    const session = await this.getLearningProgress(conversationId);
-    const stats = await this.getLearningStats(conversationId);
+  async getCompleteLearningData(conversationId: string, userId?: string) {
+    const session = await this.getLearningProgress(conversationId, userId);
+    const stats = await this.getLearningStats(conversationId, userId);
     return {
       session,
       stats,
@@ -566,6 +590,7 @@ class MemoryDB {
   async updateLearningStats(
     conversationId: string,
     statsData: {
+      userId?: string;
       totalQuestions?: number;
       correctAnswers?: number;
       totalScore?: number;
@@ -583,7 +608,9 @@ class MemoryDB {
     now.setHours(0, 0, 0, 0);
     const today = now.toISOString();
 
-    const index = this.state.learningStats.findIndex((item) => item.conversationId === conversationId);
+    const index = this.state.learningStats.findIndex(
+      (item) => item.conversationId === conversationId && (!statsData.userId || item.userId === statsData.userId),
+    );
 
     if (index >= 0) {
       const existing = this.state.learningStats[index];
@@ -623,6 +650,7 @@ class MemoryDB {
     const created: LearningStatsRecord = {
       id: `mem_stats_${Date.now()}_${randomUUID().slice(0, 8)}`,
       conversationId,
+      userId: statsData.userId ?? null,
       totalQuestions: statsData.totalQuestions || 0,
       correctAnswers: statsData.correctAnswers || 0,
       totalScore: statsData.totalScore || 0,
@@ -646,8 +674,10 @@ class MemoryDB {
     return this.clone(created);
   }
 
-  async deleteLearningProgress(conversationId: string) {
-    const session = this.state.learningSessions.find((item) => item.conversationId === conversationId);
+  async deleteLearningProgress(conversationId: string, userId?: string) {
+    const session = this.state.learningSessions.find(
+      (item) => item.conversationId === conversationId && (!userId || item.userId === userId),
+    );
     if (!session) {
       return false;
     }
@@ -662,8 +692,9 @@ class MemoryDB {
     return true;
   }
 
-  async getAllLearningSessions(limit = 50, offset = 0) {
+  async getAllLearningSessions(limit = 50, offset = 0, userId?: string) {
     const sessions = this.state.learningSessions
+      .filter((session) => !userId || session.userId === userId)
       .slice()
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
       .slice(offset, offset + limit)
@@ -672,19 +703,21 @@ class MemoryDB {
     return this.clone(sessions);
   }
 
-  async getLearningItems() {
+  async getLearningItems(userId?: string) {
     return this.clone(
       this.state.learningItems
+        .filter((item) => !userId || item.userId === userId)
         .slice()
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
     );
   }
 
-  async createLearningItems(items: Array<{ id: string; text: string; subject: string; createdAt: string }>) {
+  async createLearningItems(items: Array<{ id: string; userId?: string; text: string; subject: string; createdAt: string }>) {
     for (const item of items) {
       const index = this.state.learningItems.findIndex((existing) => existing.id === item.id);
       const record: LearningItemRecord = {
         id: item.id,
+        userId: item.userId ?? null,
         text: item.text,
         subject: item.subject,
         createdAt: item.createdAt,
@@ -701,19 +734,24 @@ class MemoryDB {
     return this.clone(items);
   }
 
-  async deleteLearningItem(id?: string) {
+  async deleteLearningItem(id?: string, userId?: string) {
     if (id) {
-      this.state.learningItems = this.state.learningItems.filter((item) => item.id !== id);
+      this.state.learningItems = this.state.learningItems.filter(
+        (item) => item.id !== id || (!!userId && item.userId !== userId),
+      );
     } else {
-      this.state.learningItems = [];
+      this.state.learningItems = userId
+        ? this.state.learningItems.filter((item) => item.userId !== userId)
+        : [];
     }
 
     this.persist();
   }
 
-  async getKnowledgeBaseItems() {
+  async getKnowledgeBaseItems(userId?: string) {
     return this.clone(
       this.state.knowledgeBaseItems
+        .filter((item) => !userId || item.userId === userId)
         .slice()
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
     );
@@ -729,6 +767,7 @@ class MemoryDB {
 
       const record: KnowledgeBaseItemRecord = {
         id: item.id,
+        userId: item.userId ?? null,
         name: item.name,
         type: item.type,
         size: item.size,
@@ -755,8 +794,10 @@ class MemoryDB {
     return this.clone(createdItems);
   }
 
-  async updateKnowledgeBaseItem(id: string, updates: Record<string, unknown>) {
-    const index = this.state.knowledgeBaseItems.findIndex((item) => item.id === id);
+  async updateKnowledgeBaseItem(id: string, updates: Record<string, unknown>, userId?: string) {
+    const index = this.state.knowledgeBaseItems.findIndex(
+      (item) => item.id === id && (!userId || item.userId === userId),
+    );
     if (index === -1) {
       throw new Error('Knowledge base item not found');
     }
@@ -775,22 +816,28 @@ class MemoryDB {
     return this.clone(updated);
   }
 
-  async deleteKnowledgeBaseItem(id?: string) {
+  async deleteKnowledgeBaseItem(id?: string, userId?: string) {
     if (id) {
-      this.state.knowledgeBaseItems = this.state.knowledgeBaseItems.filter((item) => item.id !== id);
+      this.state.knowledgeBaseItems = this.state.knowledgeBaseItems.filter(
+        (item) => item.id !== id || (!!userId && item.userId !== userId),
+      );
     } else {
-      this.state.knowledgeBaseItems = [];
+      this.state.knowledgeBaseItems = userId
+        ? this.state.knowledgeBaseItems.filter((item) => item.userId !== userId)
+        : [];
     }
 
     this.persist();
   }
 
-  async getNotes(params?: { includeArchived?: boolean; tag?: string | null; search?: string | null }) {
+  async getNotes(params?: { userId?: string; includeArchived?: boolean; tag?: string | null; search?: string | null }) {
     const includeArchived = params?.includeArchived ?? false;
     const tag = params?.tag || null;
     const search = params?.search?.toLowerCase() || null;
 
-    let notes = this.state.notes.filter((note) => (includeArchived ? true : !note.isArchived));
+    let notes = this.state.notes.filter(
+      (note) => (!params?.userId || note.userId === params.userId) && (includeArchived ? true : !note.isArchived),
+    );
 
     if (tag) {
       notes = notes.filter((note) => note.tags.includes(tag));
@@ -815,6 +862,7 @@ class MemoryDB {
     const noteId = data.id || `mem_note_${Date.now()}_${randomUUID().slice(0, 8)}`;
     const note: NoteRecord = {
       id: noteId,
+      userId: data.userId ?? null,
       title: data.title || '未命名',
       icon: data.icon || null,
       cover: data.cover || null,
@@ -864,7 +912,9 @@ class MemoryDB {
   }
 
   async updateNote(data: any) {
-    const index = this.state.notes.findIndex((note) => note.id === data.id);
+    const index = this.state.notes.findIndex(
+      (note) => note.id === data.id && (!data.userId || note.userId === data.userId),
+    );
     if (index === -1) {
       throw new Error('Note not found');
     }
@@ -926,10 +976,142 @@ class MemoryDB {
     return this.clone(this.withNoteBlocks(updatedNote));
   }
 
-  async deleteNote(id: string) {
+  async deleteNote(id: string, userId?: string) {
+    const canDelete = this.state.notes.some(
+      (note) => note.id === id && (!userId || note.userId === userId),
+    );
+    if (!canDelete) return;
     this.state.notes = this.state.notes.filter((note) => note.id !== id);
     this.state.noteBlocks = this.state.noteBlocks.filter((block) => block.noteId !== id);
     this.persist();
+  }
+
+  async getReviewCards(userId: string, dueOnly = true, limit = 30) {
+    const now = Date.now();
+    const cards = this.state.reviewCards
+      .filter((card) => card.userId === userId && (!dueOnly || Date.parse(card.nextReviewAt) <= now))
+      .slice()
+      .sort((a, b) => Date.parse(a.nextReviewAt) - Date.parse(b.nextReviewAt))
+      .slice(0, limit);
+
+    return this.clone(cards);
+  }
+
+  async getReviewCardCounts(userId: string) {
+    const now = Date.now();
+    const cards = this.state.reviewCards.filter((card) => card.userId === userId);
+    return {
+      total: cards.length,
+      dueCount: cards.filter((card) => Date.parse(card.nextReviewAt) <= now).length,
+    };
+  }
+
+  async createReviewCard(data: {
+    userId: string;
+    sourceSessionId?: string | null;
+    subject: string;
+    topic: string;
+    prompt: string;
+    answer: string;
+  }) {
+    const now = this.now();
+    const card: ReviewCardRecord = {
+      id: `mem_review_${Date.now()}_${randomUUID().slice(0, 8)}`,
+      userId: data.userId,
+      sourceSessionId: data.sourceSessionId ?? null,
+      subject: data.subject,
+      topic: data.topic,
+      prompt: data.prompt,
+      answer: data.answer,
+      stage: 0,
+      nextReviewAt: now,
+      lastReviewedAt: null,
+      reviewCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.state.reviewCards.push(card);
+    this.persist();
+    return this.clone(card);
+  }
+
+  async syncReviewCardsFromSession(input: {
+    userId: string;
+    sessionId: string;
+    subject: string;
+    topic: string;
+    questions: Array<{ question: string; correctAnswer: string; explanation?: string | null }>;
+  }) {
+    const existing = this.state.reviewCards.filter(
+      (card) => card.userId === input.userId && card.sourceSessionId === input.sessionId,
+    );
+    if (existing.length > 0) return this.clone(existing);
+
+    const cards = [];
+    for (const question of input.questions.slice(0, 5)) {
+      if (!question.question?.trim() || !question.correctAnswer?.trim()) continue;
+      cards.push(await this.createReviewCard({
+        userId: input.userId,
+        sourceSessionId: input.sessionId,
+        subject: input.subject,
+        topic: input.topic,
+        prompt: question.question.trim(),
+        answer: [question.correctAnswer, question.explanation].filter(Boolean).join('\n\n'),
+      }));
+    }
+    return cards;
+  }
+
+  async updateReviewCardFeedback(
+    id: string,
+    userId: string,
+    feedback: 'remember' | 'fuzzy' | 'forgot',
+  ) {
+    const intervals = [1, 3, 7, 14, 30, 60];
+    const index = this.state.reviewCards.findIndex((card) => card.id === id && card.userId === userId);
+    if (index === -1) return null;
+
+    const existing = this.state.reviewCards[index];
+    const stage = feedback === 'remember'
+      ? Math.min(existing.stage + 1, intervals.length - 1)
+      : feedback === 'fuzzy'
+        ? Math.max(existing.stage - 1, 0)
+        : 0;
+    const now = this.now();
+    const updated: ReviewCardRecord = {
+      ...existing,
+      stage,
+      nextReviewAt: new Date(Date.now() + intervals[stage] * 24 * 60 * 60 * 1000).toISOString(),
+      lastReviewedAt: now,
+      reviewCount: existing.reviewCount + 1,
+      updatedAt: now,
+    };
+    this.state.reviewCards[index] = updated;
+    this.persist();
+    return this.clone(updated);
+  }
+
+  async syncKnowledgeNoteFromSession(input: {
+    userId: string;
+    sessionId: string;
+    subject: string;
+    topic: string;
+    content?: string | null;
+  }) {
+    if (!input.content?.trim()) return null;
+    const sessionTag = `session:${input.sessionId}`;
+    const existing = this.state.notes.find(
+      (note) => note.userId === input.userId && note.tags.includes(sessionTag),
+    );
+    if (existing) return this.clone(this.withNoteBlocks(existing));
+
+    return this.createNote({
+      userId: input.userId,
+      title: input.topic,
+      color: '#0ea5e9',
+      tags: [input.subject, '学习产出', sessionTag],
+      blocks: [{ type: 'paragraph', content: input.content.trim(), order: 0 }],
+    });
   }
 }
 

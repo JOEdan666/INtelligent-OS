@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     // 支持两种数据格式：
     // 1. { query, history } - 旧格式
     // 2. { messages } - 新格式（从ExplainStep发送）
-    let messages;
+    let messages: Array<{ role: string; content: string }> = [];
     let query = '';
 
     if (body.messages) {
@@ -64,12 +64,29 @@ export async function POST(req: NextRequest) {
     // 支持从请求体指定模型与最大输出长度
     const requestedModel = (body && body.model) ? String(body.model) : ''
     const model = requestedModel || process.env.OPENAI_MODEL || 'deepseek-chat'
-    const max_tokens = typeof body?.max_tokens === 'number' ? body.max_tokens : undefined
+    const purpose = ['lecture', 'qa', 'quiz', 'grading', 'chat'].includes(body?.purpose)
+      ? body.purpose
+      : 'chat'
+    const purposeTokenLimits: Record<string, number> = {
+      lecture: 1200,
+      qa: 700,
+      quiz: 900,
+      grading: 1800,
+      chat: 1200,
+    }
+    const requestedMaxTokens = typeof body?.max_tokens === 'number' ? body.max_tokens : purposeTokenLimits[purpose]
+    const max_tokens = Math.max(200, Math.min(requestedMaxTokens, 2400))
+    const requestedTemperature = typeof body?.temperature === 'number' ? body.temperature : 0.5
+    const temperature = Math.max(0, Math.min(requestedTemperature, 1))
+    const responseFormat = body?.response_format === 'json_object'
+      ? { type: 'json_object' as const }
+      : undefined
 
     console.log('[API] 收到请求:', { 
       query: query ? query.substring(0, 50) + '...' : '(无query)', 
       messagesLength: messages?.length || 0, 
-      isStream 
+      isStream,
+      purpose,
     });
     console.log('[API] 配置:', { apiKey: apiKey ? '已设置' : '未设置', baseUrl, model });
 
@@ -87,8 +104,8 @@ export async function POST(req: NextRequest) {
     // 流式：将上游 SSE 转换为纯文本增量输出
     if (isStream) {
       console.log('[API] 处理流式请求');
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 45_000);
+      const upstreamController = new AbortController();
+      const timeout = setTimeout(() => upstreamController.abort(), 35_000);
 
       let upstream: Response;
       try {
@@ -101,20 +118,23 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({
             model,
             messages,
-            temperature: 0.7,
+            temperature,
             stream: true,
-            ...(max_tokens ? { max_tokens } : {}),
+            max_tokens,
+            ...(responseFormat ? { response_format: responseFormat } : {}),
           }),
           cache: 'no-store',
-          signal: controller.signal,
+          signal: upstreamController.signal,
         })
-      } finally {
+      } catch (error) {
         clearTimeout(timeout);
+        throw error
       }
 
       console.log('[API] 上游响应状态:', upstream.status);
       
       if (!upstream.ok) {
+        clearTimeout(timeout)
         let errText = ''
         try {
           const j = await upstream.json()
@@ -130,6 +150,7 @@ export async function POST(req: NextRequest) {
       const encoder = new TextEncoder()
       const decoder = new TextDecoder()
 
+      let clientCancelled = false
       const readable = new ReadableStream<Uint8Array>({
         async start(controller) {
           const reader = upstream.body?.getReader()
@@ -141,6 +162,14 @@ export async function POST(req: NextRequest) {
           let buffer = ''
           let totalContent = ''
           let chunksSent = 0
+          let pendingText = ''
+          let streamFailed = false
+          const flush = () => {
+            if (!pendingText || clientCancelled || streamFailed) return
+            controller.enqueue(encoder.encode(pendingText))
+            chunksSent++
+            pendingText = ''
+          }
           try {
             while (true) {
               const { value, done } = await reader.read()
@@ -157,8 +186,7 @@ export async function POST(req: NextRequest) {
                   const data = line.slice(5).trim()
                   if (!data) continue
                   if (data === '[DONE]') {
-                    console.log('[API] 收到 [DONE] 信号，总发送内容长度:', totalContent.length, '总块数:', chunksSent);
-                    controller.close()
+                    flush()
                     return
                   }
                   try {
@@ -169,9 +197,8 @@ export async function POST(req: NextRequest) {
                       ''
                     if (deltaContent) {
                       totalContent += deltaContent
-                      chunksSent++
-                      console.log(`[API] 发送数据块 #${chunksSent}:`, deltaContent.substring(0, 30) + '...');
-                      controller.enqueue(encoder.encode(deltaContent))
+                      pendingText += deltaContent
+                      if (pendingText.length >= 32) flush()
                     }
                   } catch (e) {
                     console.error('[API] 解析JSON数据块失败:', e, '数据:', data);
@@ -188,13 +215,23 @@ export async function POST(req: NextRequest) {
                 }
               }
             }
-            } catch (e) {
+          } catch (e) {
               console.error('[API] 处理流式响应时出错:', e);
-              controller.error(e)
+              streamFailed = true
+              if (!clientCancelled) controller.error(e)
           } finally {
-            console.log('[API] 流式响应处理完成，总内容长度:', totalContent.length);
-            controller.close()
+            clearTimeout(timeout)
+            if (!streamFailed && !clientCancelled) {
+              flush()
+              controller.close()
+            }
+            console.info('[API] 流式响应完成', { purpose, contentLength: totalContent.length, chunksSent })
           }
+        },
+        cancel() {
+          clientCancelled = true
+          clearTimeout(timeout)
+          upstreamController.abort()
         },
       })
 
@@ -223,8 +260,9 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           model,
           messages,
-          temperature: 0.7,
-          ...(max_tokens ? { max_tokens } : {}),
+          temperature,
+          max_tokens,
+          ...(responseFormat ? { response_format: responseFormat } : {}),
         }),
         cache: 'no-store',
         signal: controller.signal,

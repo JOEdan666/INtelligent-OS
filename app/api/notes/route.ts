@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/app/lib/prisma'
 import { memoryDB } from '@/app/lib/memory-db'
 import { clearDbUnavailable, noteDbUnavailable, shouldUseLocalDb } from '@/app/lib/db-fallback'
+import { getAuthenticatedUserId, unauthorizedResponse } from '@/app/lib/auth-user'
 
 // 笔记响应类型
 interface NoteResponse {
@@ -28,13 +29,16 @@ interface NoteResponse {
 // GET - 获取所有笔记
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+
     const { searchParams } = new URL(request.url)
     const includeArchived = searchParams.get('archived') === 'true'
     const tag = searchParams.get('tag')
     const search = searchParams.get('search')
 
     if (shouldUseLocalDb()) {
-      const notes = await memoryDB.getNotes({ includeArchived, tag, search })
+      const notes = await memoryDB.getNotes({ userId, includeArchived, tag, search })
       const response: NoteResponse[] = notes.map(note => ({
         id: note.id,
         title: note.title,
@@ -59,7 +63,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: response, source: 'local' })
     }
 
-    const where: Record<string, unknown> = {}
+    const where: Record<string, unknown> = { userId }
 
     if (!includeArchived) {
       where.isArchived = false
@@ -121,7 +125,9 @@ export async function GET(request: NextRequest) {
       const includeArchived = searchParams.get('archived') === 'true'
       const tag = searchParams.get('tag')
       const search = searchParams.get('search')
-      const notes = await memoryDB.getNotes({ includeArchived, tag, search })
+      const userId = await getAuthenticatedUserId()
+      if (!userId) return unauthorizedResponse()
+      const notes = await memoryDB.getNotes({ userId, includeArchived, tag, search })
       const response: NoteResponse[] = notes.map(note => ({
         id: note.id,
         title: note.title,
@@ -157,13 +163,18 @@ export async function GET(request: NextRequest) {
 // POST - 创建新笔记
 export async function POST(request: NextRequest) {
   let body: any = null
+  let ownerId = ''
 
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+    ownerId = userId
+
     body = await request.json()
     const { title, content, color, tags, icon, cover, blocks } = body
 
     if (shouldUseLocalDb()) {
-      const note = await memoryDB.createNote({ title, content, color, tags, icon, cover, blocks })
+      const note = await memoryDB.createNote({ userId, title, content, color, tags, icon, cover, blocks })
       const response: NoteResponse = {
         id: note.id,
         title: note.title,
@@ -191,6 +202,7 @@ export async function POST(request: NextRequest) {
     // 创建笔记
     const note = await prisma.note.create({
       data: {
+        userId,
         title: title || '未命名',
         icon: icon || null,
         cover: cover || null,
@@ -248,7 +260,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: response })
   } catch (error) {
     if (noteDbUnavailable(error) && body) {
-      const note = await memoryDB.createNote(body)
+      const note = await memoryDB.createNote({ ...body, userId: ownerId })
       const response: NoteResponse = {
         id: note.id,
         title: note.title,
@@ -284,8 +296,13 @@ export async function POST(request: NextRequest) {
 // PUT - 更新笔记
 export async function PUT(request: NextRequest) {
   let body: any = null
+  let ownerId = ''
 
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+    ownerId = userId
+
     body = await request.json()
     const { id, title, content, color, tags, icon, cover, blocks, isFavorite, isArchived } = body
 
@@ -297,7 +314,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (shouldUseLocalDb()) {
-      const note = await memoryDB.updateNote(body)
+      const note = await memoryDB.updateNote({ ...body, userId })
       const response: NoteResponse = {
         id: note.id,
         title: note.title,
@@ -331,6 +348,11 @@ export async function PUT(request: NextRequest) {
     if (cover !== undefined) updateData.cover = cover
     if (isFavorite !== undefined) updateData.isFavorite = isFavorite
     if (isArchived !== undefined) updateData.isArchived = isArchived
+
+    const ownedNote = await prisma.note.findFirst({ where: { id, userId }, select: { id: true } })
+    if (!ownedNote) {
+      return NextResponse.json({ success: false, error: '笔记不存在' }, { status: 404 })
+    }
 
     // 如果有 blocks，先删除旧的再创建新的
     if (blocks !== undefined) {
@@ -374,7 +396,7 @@ export async function PUT(request: NextRequest) {
 
     // 更新笔记主体
     const note = await prisma.note.update({
-      where: { id },
+      where: { id, userId },
       data: updateData,
       include: {
         blocks: {
@@ -408,7 +430,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, data: response })
   } catch (error) {
     if (noteDbUnavailable(error) && body?.id) {
-      const note = await memoryDB.updateNote(body)
+      const note = await memoryDB.updateNote({ ...body, userId: ownerId })
       const response: NoteResponse = {
         id: note.id,
         title: note.title,
@@ -444,6 +466,9 @@ export async function PUT(request: NextRequest) {
 // DELETE - 删除笔记
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -455,14 +480,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (shouldUseLocalDb()) {
-      await memoryDB.deleteNote(id)
+      await memoryDB.deleteNote(id, userId)
       return NextResponse.json({ success: true, message: '笔记已删除', source: 'local' })
     }
 
     // 由于设置了 onDelete: Cascade，删除笔记会自动删除关联的 blocks
-    await prisma.note.delete({
-      where: { id }
-    })
+    await prisma.note.deleteMany({ where: { id, userId } })
     clearDbUnavailable()
 
     return NextResponse.json({ success: true, message: '笔记已删除' })
@@ -471,7 +494,9 @@ export async function DELETE(request: NextRequest) {
       const { searchParams } = new URL(request.url)
       const id = searchParams.get('id')
       if (id) {
-        await memoryDB.deleteNote(id)
+        const userId = await getAuthenticatedUserId()
+        if (!userId) return unauthorizedResponse()
+        await memoryDB.deleteNote(id, userId)
         return NextResponse.json({ success: true, message: '笔记已删除', source: 'local' })
       }
     }

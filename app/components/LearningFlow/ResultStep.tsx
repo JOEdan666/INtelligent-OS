@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Trophy, Star, CheckCircle, XCircle, ArrowRight, RotateCcw, BookOpen, Target, Lightbulb } from 'lucide-react'
 
@@ -25,6 +25,7 @@ interface ResultStepProps {
 }
 
 export default function ResultStep({ answers, questions, knowledgeContent, onRestart, onContinue }: ResultStepProps) {
+  const gradingKeyRef = useRef('')
   const [gradingResults, setGradingResults] = useState<GradingResult[]>([])
   const [totalScore, setTotalScore] = useState(0)
   const [maxPossibleScore, setMaxPossibleScore] = useState(0)
@@ -37,7 +38,7 @@ export default function ResultStep({ answers, questions, knowledgeContent, onRes
   const [wrongAnswers, setWrongAnswers] = useState<{questionId: number, question: string, userAnswer: string, correctAnswer: string, errorType: string}[]>([])
 
   // AI智能评分系统 - 先解题再评分
-  const gradeAnswers = async () => {
+  const gradeAnswers = useCallback(async () => {
     console.log('开始评分...', { answers, questions, knowledgeContent })
     setIsLoading(true)
     
@@ -130,6 +131,10 @@ export default function ResultStep({ answers, questions, knowledgeContent, onRes
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          purpose: 'grading',
+          max_tokens: 1400,
+          temperature: 0.2,
+          response_format: 'json_object',
           messages: [
             {
               role: 'system',
@@ -364,16 +369,22 @@ ${item.correctAnswer ? `正确答案：${item.correctAnswer}` : ''}
     } finally {
       setIsAnalyzing(false)
     }
-  }
+  }, [answers, knowledgeContent, questions])
 
   useEffect(() => {
+    const gradingKey = JSON.stringify({
+      answers,
+      questions: questions.map((question) => question.id),
+    })
+    if (gradingKeyRef.current === gradingKey) return
+    gradingKeyRef.current = gradingKey
     console.log('ResultStep useEffect triggered', { 
       answersLength: answers.length, 
       questionsLength: questions.length, 
       knowledgeContentLength: knowledgeContent.length 
     })
-    gradeAnswers()
-  }, [answers, questions, knowledgeContent])
+    void gradeAnswers()
+  }, [answers, gradeAnswers, knowledgeContent, questions])
 
   const getScoreColor = (score: number, maxScore: number) => {
     const percentage = (score / maxScore) * 100

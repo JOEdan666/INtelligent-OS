@@ -11,6 +11,7 @@ interface ReAskModalProps {
   subject: string;
   topic: string;
   context: string; // Renamed from originalContent
+  mode?: 'guide' | 'workshop';
 }
 
 interface ChatMessage {
@@ -19,10 +20,11 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-export default function ReAskModal({ isOpen, onClose, onComplete, subject, topic, context }: ReAskModalProps) {
+export default function ReAskModal({ isOpen, onClose, onComplete, subject, topic, context, mode = 'guide' }: ReAskModalProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [streamingAnswer, setStreamingAnswer] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -31,7 +33,7 @@ export default function ReAskModal({ isOpen, onClose, onComplete, subject, topic
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, streamingAnswer]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +48,7 @@ export default function ReAskModal({ isOpen, onClose, onComplete, subject, topic
     setMessages(prev => [...prev, userMessage]);
     setQuestion('');
     setIsLoading(true);
+    setStreamingAnswer('');
 
     try {
       const aiProvider = createProviderFromEnv();
@@ -53,29 +56,41 @@ export default function ReAskModal({ isOpen, onClose, onComplete, subject, topic
         throw new Error('AI服务不可用');
       }
       
-      // 构建上下文信息
-      const contextPrompt = `你是一位耐心的老师，正在为学生解答关于"${subject} - ${topic}"的问题。
-
-原始讲解内容：
-${context}
-
-学生现在有新的问题需要你解答。请基于原始讲解内容，用简洁明了的方式回答学生的问题。如果问题与原内容相关，可以引用原内容；如果是新的问题，请提供清晰的解释。
-
-学生的问题：${userMessage.content}`;
+      const history = [
+        {
+          role: 'system' as const,
+          content: mode === 'workshop'
+            ? `你正在和用户共同完成“${subject} · ${topic}”这个真实任务。基于用户刚提供的信息，直接推进当前产出：给判断、修改模板或形成下一版内容；一次只推进一步，结尾最多问1个确实影响下一步的问题。不要出题考试，不要退回泛泛讲课。控制在300—500个汉字。\n\n当前共创内容：\n${context.slice(0, 2400)}`
+            : `你正在解答“${subject} · ${topic}”学习过程中的追问。先直接回答，再解释原因或举一个例子；不要用另一个问题代替回答。控制在 300—500 个汉字。\n\n讲解摘录：\n${context.slice(0, 2400)}`,
+        },
+        ...messages.slice(-4).map((message) => ({ role: message.role, content: message.content })),
+      ];
 
       let responseContent = '';
       
       // 设置消息处理器
       aiProvider.onMessage((message: string, isFinal: boolean) => {
         responseContent += message;
+        if (message) setStreamingAnswer(responseContent);
         
         if (isFinal) {
+          if (!responseContent.trim()) {
+            setQuestion(userMessage.content);
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: '这次没有收到有效回答，问题已保留，请直接重试。',
+              timestamp: new Date(),
+            }]);
+            setIsLoading(false);
+            return;
+          }
           const assistantMessage: ChatMessage = {
             role: 'assistant',
             content: responseContent,
             timestamp: new Date()
           };
           setMessages(prev => [...prev, assistantMessage]);
+          setStreamingAnswer('');
           setIsLoading(false);
           
           if (onComplete) {
@@ -92,24 +107,32 @@ ${context}
         console.error('AI回答失败:', error);
         const errorMessage: ChatMessage = {
           role: 'assistant',
-          content: '抱歉，我现在无法回答您的问题。请稍后再试。',
+          content: `回答失败：${error}。问题已保留，可以直接重试。`,
           timestamp: new Date()
         };
+        setQuestion(userMessage.content);
         setMessages(prev => [...prev, errorMessage]);
+        setStreamingAnswer('');
         setIsLoading(false);
       });
 
       // 发送消息
-      await aiProvider.sendMessage(contextPrompt);
+      await aiProvider.sendMessage(userMessage.content, history, {
+        purpose: 'qa',
+        maxTokens: 700,
+        temperature: 0.35,
+      });
       
     } catch (error) {
       console.error('AI回答失败:', error);
       const errorMessage: ChatMessage = {
         role: 'assistant',
-        content: '抱歉，我现在无法回答您的问题。请稍后再试。',
+        content: '回答请求没有完成，问题已保留，可以直接重试。',
         timestamp: new Date()
       };
+      setQuestion(userMessage.content);
       setMessages(prev => [...prev, errorMessage]);
+      setStreamingAnswer('');
     } finally {
       setIsLoading(false);
     }
@@ -127,7 +150,7 @@ ${context}
         {/* 头部 */}
         <div className="flex items-center justify-between p-4 border-b">
           <div>
-            <h2 className="text-lg font-semibold">向老师提问</h2>
+            <h2 className="text-lg font-semibold">{mode === 'workshop' ? '继续和 AI 共创' : '继续问 AI'}</h2>
             <p className="text-sm text-gray-600">{subject} - {topic}</p>
           </div>
           <div className="flex items-center space-x-2">
@@ -150,8 +173,8 @@ ${context}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 ? (
             <div className="text-center text-gray-500 mt-8">
-              <p>有什么不懂的地方吗？</p>
-              <p className="text-sm mt-2">我会基于刚才的讲解内容为你解答</p>
+              <p>{mode === 'workshop' ? '补充你的实际情况，我们继续推进。' : '哪里没讲明白，直接告诉我。'}</p>
+              <p className="text-sm mt-2">{mode === 'workshop' ? 'AI 会根据你的信息继续修改和产出' : 'AI 会基于刚才的内容换种方式解释'}</p>
             </div>
           ) : (
             messages.map((message, index) => (
@@ -185,7 +208,16 @@ ${context}
             ))
           )}
           
-          {isLoading && (
+          {streamingAnswer && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] rounded-lg bg-gray-100 p-3 text-gray-800">
+                <MarkdownRenderer content={streamingAnswer} fontSize="sm" />
+                <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-blue-500 align-middle" />
+              </div>
+            </div>
+          )}
+
+          {isLoading && !streamingAnswer && (
             <div className="flex justify-start">
               <div className="bg-gray-100 text-gray-800 p-3 rounded-lg">
                 <div className="flex items-center space-x-2">
@@ -206,7 +238,7 @@ ${context}
               type="text"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="输入你的问题..."
+              placeholder={mode === 'workshop' ? '补充信息、反馈或粘贴你的初稿…' : '输入你的问题…'}
               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               disabled={isLoading}
             />
@@ -219,7 +251,9 @@ ${context}
             </button>
           </form>
           <p className="text-xs text-gray-500 mt-2">
-            💡 提示：你可以问“这个概念我还是不太懂”、“能举个例子吗”等问题
+            {mode === 'workshop'
+              ? '可以直接说：这是我的用户反馈，请帮我提炼痛点并说明依据。'
+              : '可以直接说：这个概念没懂，请换个例子讲。'}
           </p>
         </div>
       </div>

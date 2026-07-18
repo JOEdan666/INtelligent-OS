@@ -4,17 +4,13 @@ import { prisma } from '@/app/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
 import { memoryDB } from '@/app/lib/memory-db';
 import { clearDbUnavailable, noteDbUnavailable, shouldUseLocalDb } from '@/app/lib/db-fallback';
+import { syncKnowledgeNoteFromSession, syncReviewCardsFromSession } from '@/app/services/reviewCardService';
 
 // GET - 获取学习进度
 export async function GET(request: NextRequest) {
   try {
-    let { userId } = await auth();
-    
-    // 开发环境兜底：如果未登录，使用模拟用户ID
-    if (!userId && process.env.NODE_ENV === 'development') {
-      userId = 'mock-dev-user';
-      console.log('⚠️ 开发模式：使用模拟用户ID (GET /api/learning-progress)');
-    }
+    const { userId } = await auth();
+    if (!userId) return NextResponse.json({ error: '请先登录' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
     const conversationId = searchParams.get('conversationId');
@@ -27,7 +23,7 @@ export async function GET(request: NextRequest) {
     // 如果请求获取所有学习会话
     if (getAllSessions) {
       if (useLocalDb) {
-        const sessions = await memoryDB.getAllLearningSessions(limit, offset);
+        const sessions = await memoryDB.getAllLearningSessions(limit, offset, userId);
         return NextResponse.json({
           success: true,
           sessions,
@@ -36,7 +32,7 @@ export async function GET(request: NextRequest) {
       }
 
       try {
-        const sessions = await LearningProgressService.getAllLearningSessions(limit, offset);
+        const sessions = await LearningProgressService.getAllLearningSessions(userId, limit, offset);
         clearDbUnavailable();
         return NextResponse.json({
           success: true,
@@ -44,7 +40,7 @@ export async function GET(request: NextRequest) {
         });
       } catch (e: any) {
         if (noteDbUnavailable(e)) {
-           const sessions = await memoryDB.getAllLearningSessions(limit, offset);
+           const sessions = await memoryDB.getAllLearningSessions(limit, offset, userId);
            return NextResponse.json({ success: true, sessions, source: 'local' });
         }
         throw e;
@@ -63,15 +59,15 @@ export async function GET(request: NextRequest) {
     try {
       if (useLocalDb) {
         progress = includeStats
-          ? await memoryDB.getCompleteLearningData(conversationId)
-          : await memoryDB.getLearningProgress(conversationId);
+          ? await memoryDB.getCompleteLearningData(conversationId, userId)
+          : await memoryDB.getLearningProgress(conversationId, userId);
       } else {
         if (includeStats) {
           // 获取完整的学习数据（包含统计信息）
-          progress = await LearningProgressService.getCompleteLearningData(conversationId);
+          progress = await LearningProgressService.getCompleteLearningData(conversationId, userId);
         } else {
           // 只获取基本学习进度
-          progress = await LearningProgressService.getLearningProgress(conversationId);
+          progress = await LearningProgressService.getLearningProgress(conversationId, userId);
         }
         clearDbUnavailable();
       }
@@ -81,8 +77,8 @@ export async function GET(request: NextRequest) {
       }
 
       progress = includeStats
-        ? await memoryDB.getCompleteLearningData(conversationId)
-        : await memoryDB.getLearningProgress(conversationId);
+        ? await memoryDB.getCompleteLearningData(conversationId, userId)
+        : await memoryDB.getLearningProgress(conversationId, userId);
     }
     
     if (!progress) {
@@ -105,13 +101,8 @@ export async function GET(request: NextRequest) {
 // POST - 保存学习进度
 export async function POST(request: NextRequest) {
   try {
-    let { userId } = await auth();
-    
-    // 开发环境兜底：如果未登录，使用模拟用户ID
-    if (!userId && process.env.NODE_ENV === 'development') {
-      userId = 'mock-dev-user';
-      console.log('⚠️ 开发模式：使用模拟用户ID (POST /api/learning-progress)');
-    }
+    const { userId } = await auth();
+    if (!userId) return NextResponse.json({ error: '请先登录' }, { status: 401 });
 
     const data = await request.json();
     
@@ -170,10 +161,33 @@ export async function POST(request: NextRequest) {
       }
 
       if (stats) {
-        await memoryDB.updateLearningStats(conversationId, stats);
+        await memoryDB.updateLearningStats(conversationId, { ...stats, userId });
       }
 
-      return memoryDB.getLearningProgress(conversationId);
+      const savedProgress = await memoryDB.getLearningProgress(conversationId, userId);
+
+      if (isCompleted && savedProgress) {
+        await memoryDB.syncReviewCardsFromSession({
+          userId,
+          sessionId: progress.id,
+          subject: progress.subject,
+          topic: progress.topic,
+          questions: (savedProgress.quizQuestions || []).map((question: any) => ({
+            question: question.question,
+            correctAnswer: question.correctAnswer,
+            explanation: question.explanation,
+          })),
+        });
+        await memoryDB.syncKnowledgeNoteFromSession({
+          userId,
+          sessionId: progress.id,
+          subject: progress.subject,
+          topic: progress.topic,
+          content: data.aiSummary || reviewNotes || aiExplanation,
+        });
+      }
+
+      return savedProgress;
     };
 
     try {
@@ -184,6 +198,7 @@ export async function POST(request: NextRequest) {
 
       // 保存基本学习进度
       const progress = await LearningProgressService.saveLearningProgress({
+        userId,
         conversationId,
         subject,
         topic,
@@ -242,7 +257,31 @@ export async function POST(request: NextRequest) {
 
       // 如果有统计数据，保存统计数据
       if (stats) {
-        await LearningProgressService.updateLearningStats(conversationId, stats);
+        await LearningProgressService.updateLearningStats(conversationId, userId, stats);
+      }
+
+      if (isCompleted) {
+        const savedQuestions = await prisma.quizQuestion.findMany({
+          where: { sessionId: progress.id },
+          orderBy: { order: 'asc' },
+          select: { question: true, correctAnswer: true, explanation: true },
+        });
+        await syncReviewCardsFromSession({
+          userId,
+          sessionId: progress.id,
+          subject: progress.subject,
+          topic: progress.topic,
+          questions: savedQuestions,
+        });
+        await syncKnowledgeNoteFromSession({
+          userId,
+          sessionId: progress.id,
+          subject: progress.subject,
+          topic: progress.topic,
+          summary: data.aiSummary,
+          reviewNotes,
+          explanation: aiExplanation,
+        });
       }
 
       clearDbUnavailable();
@@ -268,6 +307,9 @@ export async function POST(request: NextRequest) {
 // PUT - 更新学习进度
 export async function PUT(request: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) return NextResponse.json({ error: '请先登录' }, { status: 401 });
+
     const body = await request.json();
     const { conversationId, aiExplanation, socraticDialogue, currentStep, isCompleted } = body;
 
@@ -283,9 +325,10 @@ export async function PUT(request: NextRequest) {
     let learningProgress;
 
     if (useLocalDb) {
-      const existing = await memoryDB.getLearningProgress(conversationId);
+      const existing = await memoryDB.getLearningProgress(conversationId, userId);
       learningProgress = await memoryDB.upsertLearningSession({
         conversationId,
+        userId,
         subject: existing?.subject || '未设置',
         topic: existing?.topic || '未设置',
         aiExplanation,
@@ -296,8 +339,9 @@ export async function PUT(request: NextRequest) {
     } else {
       try {
         // 读取现有会话，避免覆盖必填字段为空字符串
-        const existing = await LearningProgressService.getLearningProgress(conversationId);
+        const existing = await LearningProgressService.getLearningProgress(conversationId, userId);
         learningProgress = await LearningProgressService.saveLearningProgress({
+          userId,
           conversationId,
           subject: existing?.subject || '未设置',
           topic: existing?.topic || '未设置',
@@ -312,9 +356,10 @@ export async function PUT(request: NextRequest) {
           throw error;
         }
 
-        const existing = await memoryDB.getLearningProgress(conversationId);
+        const existing = await memoryDB.getLearningProgress(conversationId, userId);
         learningProgress = await memoryDB.upsertLearningSession({
           conversationId,
+          userId,
           subject: existing?.subject || '未设置',
           topic: existing?.topic || '未设置',
           aiExplanation,
@@ -338,6 +383,9 @@ export async function PUT(request: NextRequest) {
 // DELETE - 删除学习进度
 export async function DELETE(request: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) return NextResponse.json({ error: '请先登录' }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const conversationId = searchParams.get('conversationId');
 
@@ -349,11 +397,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (shouldUseLocalDb()) {
-      await memoryDB.deleteLearningProgress(conversationId);
+      await memoryDB.deleteLearningProgress(conversationId, userId);
       return NextResponse.json({ success: true, source: 'local' });
     }
 
-    await LearningProgressService.deleteLearningProgress(conversationId);
+    await LearningProgressService.deleteLearningProgress(conversationId, userId);
     clearDbUnavailable();
 
     return NextResponse.json({ success: true });
@@ -362,7 +410,9 @@ export async function DELETE(request: NextRequest) {
       const { searchParams } = new URL(request.url);
       const conversationId = searchParams.get('conversationId');
       if (conversationId) {
-        await memoryDB.deleteLearningProgress(conversationId);
+        const { userId } = await auth();
+        if (!userId) return NextResponse.json({ error: '请先登录' }, { status: 401 });
+        await memoryDB.deleteLearningProgress(conversationId, userId);
         return NextResponse.json({ success: true, source: 'local' });
       }
     }

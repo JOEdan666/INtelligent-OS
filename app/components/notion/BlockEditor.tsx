@@ -135,7 +135,7 @@ export default function BlockEditor({
   }, [blocks, onChange, handleBlockChange])
 
   // Handle key events for navigation and menu
-  const handleKeyDown = useCallback((blockId: string, e: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = useCallback((blockId: string, e: KeyboardEvent<HTMLElement>) => {
     // Open menu on '/'
     if (e.key === '/' && !menuOpen) {
       e.preventDefault()

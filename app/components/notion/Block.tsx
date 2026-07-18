@@ -12,7 +12,7 @@ interface BlockProps {
   onFocus: () => void
   onBlur: () => void
   onChange: (content: string, properties?: BlockType['properties']) => void
-  onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void
+  onKeyDown: (e: KeyboardEvent<HTMLElement>) => void
   onAddBlock: () => void
   onDelete: () => void
   onTypeChange: (type: BlockTypeEnum) => void
@@ -95,7 +95,7 @@ export default function Block({
     onChange(text)
   }
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       onAddBlock()

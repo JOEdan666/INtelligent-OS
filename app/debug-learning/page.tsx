@@ -45,7 +45,9 @@ function DebugLearningContent() {
 
       // 2. 查找现有对话
       addDebugInfo('2. 查找现有学习对话...');
-      const existingConversation = conversationService.findExistingLearningConversation(subject, topic);
+      const existingConversation = learningConversations.find(
+        (conversation) => conversation.subject === subject && conversation.topic === topic,
+      );
       
       if (existingConversation) {
         addDebugInfo(`✓ 找到现有对话: ${existingConversation.id}`);

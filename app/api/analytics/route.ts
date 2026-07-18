@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { LearningProgressService } from '@/app/services/learningProgressService'
+import { auth } from '@clerk/nextjs/server'
 
 export async function GET(req: NextRequest) {
   try {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json({ success: false, error: '请先登录' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type')
 
     if (type === 'dashboard') {
-      const stats = await LearningProgressService.getGlobalLearningStats()
+      const stats = await LearningProgressService.getGlobalLearningStats(userId)
       return NextResponse.json({
         success: true,
         data: stats
@@ -42,4 +48,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 400 })
   }
 }
-

@@ -1,6 +1,5 @@
 "use client"
 import NotesSection from '../components/NotesSection'
-import { useEffect } from 'react'
 
 export default function NotesPage() {
   return (

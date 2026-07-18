@@ -43,36 +43,38 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
   const [verificationResult, setVerificationResult] = useState<'pending' | 'correct' | 'incorrect' | 'completed'>('pending');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(true);
+  const variantGenerationKeyRef = useRef('');
 
   // 生成变式题
   useEffect(() => {
     const generateVariantQuestion = async () => {
       if (!session?.topic) return;
+
+      const generationKey = `${session.topic}|${session.subject || ''}|${grade}`;
+      if (variantGenerationKeyRef.current === generationKey) return;
+      variantGenerationKeyRef.current = generationKey;
       
       setIsLoadingQuestion(true);
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 20000);
       try {
-        const prompt = `你是一位经验丰富的${grade} ${session.subject || '全科'}老师。
-学生刚刚学习了"${session.topic}"这个知识点。
-请生成一道**变式题**（Variant Question）来检验学生是否真正掌握了该知识点。
-
-要求：
-1. **难度匹配**：严格符合${grade}学生的认知水平。不要出现超纲的抽象符号（如未学过的参数k讨论）或复杂概念。
-2. **具体情境**：题目要具体、直观，最好结合实际数值或具体图形/情境。
-3. **考察本质**：考察学生对核心概念的迁移应用能力，而不是死记硬背。
-4. **格式要求**：返回JSON格式，包含题目、参考答案和详细解析。
-
-输出JSON格式：
+        const prompt = `为${grade}学生就“${session.subject || '综合'}：${session.topic}”生成1道具体、不过纲的迁移应用题，检验理解而非记忆。解析不超过120字。只返回以下JSON：
 {
   "question": "题目内容",
-  "referenceAnswer": "参考答案（简洁明了）",
-  "explanation": "详细解析（解题思路和步骤）"
+  "referenceAnswer": "简洁参考答案",
+  "explanation": "简洁解题思路"
 }`;
 
         const response = await fetch('/api/openai-chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
-            messages: [{ role: 'user', content: prompt }]
+            messages: [{ role: 'user', content: prompt }],
+            purpose: 'quiz',
+            max_tokens: 500,
+            temperature: 0.2,
+            response_format: 'json_object'
           })
         });
 
@@ -118,6 +120,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
           points: 10
         });
       } finally {
+        window.clearTimeout(timeoutId);
         setIsLoadingQuestion(false);
       }
     };

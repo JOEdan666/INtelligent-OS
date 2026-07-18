@@ -15,7 +15,7 @@ interface DraggableBlockProps {
   onFocus: () => void
   onBlur: () => void
   onChange: (content: string, properties?: BlockType['properties']) => void
-  onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void
+  onKeyDown: (e: KeyboardEvent<HTMLElement>) => void
   onAddBlock: () => void
   onDelete: () => void
   onTypeChange: (type: BlockTypeEnum) => void

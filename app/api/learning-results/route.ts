@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { getAuthenticatedUserId, unauthorizedResponse } from '@/app/lib/auth-user';
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+    if (!userId) return unauthorizedResponse();
+
     const { searchParams } = new URL(request.url);
     const conversationId = searchParams.get('conversationId');
 
@@ -14,8 +18,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 获取学习会话数据
-    const session = await prisma.learningSession.findUnique({
-      where: { conversationId },
+    const session = await prisma.learningSession.findFirst({
+      where: { conversationId, userId },
       include: {
         quizQuestions: true,
         userAnswers: true
@@ -30,8 +34,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 获取学习统计数据
-    const stats = await prisma.learningStats.findUnique({
-      where: { conversationId }
+    const stats = await prisma.learningStats.findFirst({
+      where: { conversationId, userId }
     });
 
     // 计算真实的测验成绩
@@ -277,8 +281,11 @@ function getEfficiencyLevel(score: number): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+    if (!userId) return unauthorizedResponse();
+
     const body = await request.json();
-    const { conversationId, manualScore, manualTotal, manualUnderstanding } = body;
+    const { conversationId, manualScore, manualTotal } = body;
 
     if (!conversationId) {
       return NextResponse.json(
@@ -287,11 +294,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const session = await prisma.learningSession.findFirst({
+      where: { conversationId, userId },
+      select: { id: true }
+    });
+
+    if (!session) {
+      return NextResponse.json({ error: '未找到学习会话' }, { status: 404 });
+    }
+
     // 如果提供了手动数据，更新学习统计
     if (manualScore !== undefined && manualTotal !== undefined) {
       await prisma.learningStats.upsert({
         where: { conversationId },
         update: {
+          userId,
           totalQuestions: manualTotal,
           correctAnswers: manualScore,
           accuracy: (manualScore / manualTotal) * 100,
@@ -299,6 +316,7 @@ export async function POST(request: NextRequest) {
         },
         create: {
           conversationId,
+          userId,
           totalQuestions: manualTotal,
           correctAnswers: manualScore,
           accuracy: (manualScore / manualTotal) * 100

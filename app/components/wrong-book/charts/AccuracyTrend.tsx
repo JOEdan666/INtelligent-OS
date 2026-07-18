@@ -63,7 +63,7 @@ export default function AccuracyTrend({
             tickFormatter={(value) => `${value}%`}
           />
           <Tooltip
-            formatter={(value: number) => [`${value}%`, '正确率']}
+            formatter={(value: number | undefined) => [`${value ?? 0}%`, '正确率']}
             labelFormatter={(label) => `日期: ${label}`}
             contentStyle={{
               borderRadius: '8px',

@@ -354,7 +354,9 @@ export const useWrongQuestionStore = create<WrongQuestionState>()(
           const oldState = persistedState as { questions?: unknown[] }
           if (oldState.questions) {
             return {
-              questions: oldState.questions.map((q: Record<string, unknown>) => ({
+              questions: oldState.questions.map((value) => {
+                const q = value as Record<string, unknown>
+                return ({
                 ...q,
                 imageUrls: q.imageUrls || [],
                 answerImageUrls: q.answerImageUrls || [],
@@ -365,7 +367,8 @@ export const useWrongQuestionStore = create<WrongQuestionState>()(
                 reviewCount: q.reviewCount || 0,
                 isFavorite: q.isFavorite || false,
                 updatedAt: q.updatedAt || q.createdAt || Date.now()
-              }))
+                })
+              })
             }
           }
         }

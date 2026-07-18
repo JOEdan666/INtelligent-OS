@@ -8,11 +8,12 @@ import ThemeProvider from './providers/ThemeProvider'
 import ErrorBoundary from './components/ErrorBoundary'
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://xueban.org'),
   title: '学伴',
-  description: '学伴：AI驱动的个性化学习助手，帮助你诊断薄弱点、系统学习、即时对话',
+  description: '个人 AI 学习操作系统：主动学习、验证掌握、按时复习并沉淀知识资产。',
   openGraph: {
     title: '学伴',
-    description: 'AI驱动的个性化学习助手，帮助你诊断薄弱点、系统学习、即时对话',
+    description: '主动学习、验证掌握、按时复习并沉淀知识资产。',
     siteName: '学伴',
     images: [
       { url: '/intelligent.jpg', width: 1200, height: 630, alt: '学伴' }

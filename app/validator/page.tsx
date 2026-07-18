@@ -564,7 +564,7 @@ export default function ValidatorPage() {
                   <div className="space-y-4">
                     {report.voiceOfCustomer.map((voc: VoiceOfCustomer, i: number) => (
                       <div key={i} className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/10">
-                        <p className="text-sm text-[var(--highlight)] italic font-light mb-2">"{voc.quote}"</p>
+                        <p className="text-sm text-[var(--highlight)] italic font-light mb-2">“{voc.quote}”</p>
                         <div className="text-xs font-bold text-purple-400 uppercase tracking-wider text-right">
                           — 来自 {voc.source}
                         </div>

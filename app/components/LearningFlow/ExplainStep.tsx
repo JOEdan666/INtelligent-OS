@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { LearningState } from '../../types/learning';
-import { CheckCircle, HelpCircle, ArrowRight, BookOpen } from 'lucide-react';
+import { HelpCircle, ArrowRight, BookOpen } from 'lucide-react';
 import ReAskModal from './ReAskModal';
 import MarkdownRenderer from '../MarkdownRenderer';
 
 interface ExplainStepProps {
   content: string;
   onNext: () => void;
+  onPractice?: () => void;
+  onFinish?: () => void;
+  learningMode?: 'guide' | 'workshop';
   onAskQuestion?: (question: string) => void;
   step?: LearningState;
   onSkipToQuiz?: () => void;
@@ -26,11 +29,13 @@ interface ExplainStepProps {
 export default function ExplainStep({ 
   content, 
   onNext, 
-  step = 'REMEDY',
   subject,
   topic,
   socraticDialogue = [],
-  onSocraticDialogueUpdate
+  onSocraticDialogueUpdate,
+  onPractice,
+  onFinish,
+  learningMode = 'guide'
 }: ExplainStepProps) {
   
   // 模拟加载状态（如果内容为空）
@@ -38,16 +43,12 @@ export default function ExplainStep({
   const [showReAsk, setShowReAsk] = useState(false);
   const [localDialogue, setLocalDialogue] = useState<Array<{question: string; answer: string; feedback?: string}>>(socraticDialogue);
 
-  // 当本地对话更新时，通知父组件
-  useEffect(() => {
-    if (onSocraticDialogueUpdate) {
-      onSocraticDialogueUpdate(localDialogue);
-    }
-  }, [localDialogue, onSocraticDialogueUpdate]);
-
   const handleReAskComplete = (dialogueItem: {question: string; answer: string; feedback?: string}) => {
-    setLocalDialogue(prev => [...prev, dialogueItem]);
-    setShowReAsk(false);
+    setLocalDialogue(prev => {
+      const nextDialogue = [...prev, dialogueItem];
+      onSocraticDialogueUpdate?.(nextDialogue);
+      return nextDialogue;
+    });
   };
 
   return (
@@ -59,8 +60,10 @@ export default function ExplainStep({
             <BookOpen className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-900">知识补漏</h2>
-            <p className="text-sm text-slate-500">针对你的薄弱点进行的靶向讲解</p>
+            <h2 className="text-xl font-bold text-slate-900">{learningMode === 'workshop' ? 'AI 实战共创' : 'AI 带学'}</h2>
+            <p className="text-sm text-slate-500">
+              {learningMode === 'workshop' ? '围绕真实问题，每次推进一个可用结果' : '先讲清楚，再根据你的问题继续调整'}
+            </p>
           </div>
         </div>
         <div className="text-sm text-slate-400">
@@ -73,8 +76,10 @@ export default function ExplainStep({
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 h-full">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-            <p className="text-slate-600 font-medium">专属私教正在为你准备讲解...</p>
-            <p className="text-slate-400 text-sm mt-2">分析错题原因 · 提炼核心考点 · 生成通俗解释</p>
+            <p className="text-slate-600 font-medium">{learningMode === 'workshop' ? 'AI 正在准备共创起点…' : 'AI 正在准备讲解…'}</p>
+            <p className="text-slate-400 text-sm mt-2">
+              {learningMode === 'workshop' ? '明确目标 · 生成模板 · 推进第一步' : '提炼关键概念 · 组织例子 · 生成通俗解释'}
+            </p>
           </div>
         ) : (
           <div className="prose prose-slate max-w-none">
@@ -88,7 +93,7 @@ export default function ExplainStep({
         <div className="mt-8 space-y-4">
           <h3 className="text-lg font-bold text-slate-800 flex items-center">
             <span className="w-1 h-6 bg-indigo-500 rounded-full mr-2"></span>
-            深入思考记录
+            {learningMode === 'workshop' ? '共创记录' : '学习对话记录'}
           </h3>
           {localDialogue.map((item, idx) => (
             <div key={idx} className="bg-slate-50 rounded-xl p-5 border border-slate-200">
@@ -112,24 +117,38 @@ export default function ExplainStep({
       )}
 
       {/* 底部操作栏 */}
-      <div className="mt-8 flex justify-between items-center">
+      <div className="mt-8 flex flex-wrap justify-between gap-3 items-center">
         <button
           onClick={() => setShowReAsk(true)}
           disabled={isLoading}
           className="text-slate-500 hover:text-blue-600 font-medium flex items-center transition-colors px-4 py-2 rounded-lg hover:bg-slate-50 disabled:opacity-50"
         >
           <HelpCircle className="w-5 h-5 mr-2" />
-          <span>我有疑问，请苏格拉底老师解答</span>
+          <span>{learningMode === 'workshop' ? '补充信息，继续和 AI 一起做' : '继续问 AI，让它换种方式讲'}</span>
         </button>
 
-        <button
-          onClick={onNext}
-          disabled={isLoading}
-          className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:shadow-none disabled:hover:translate-y-0 flex items-center gap-2"
-        >
-          <span>我已理解，做题验证</span>
-          <ArrowRight className="w-5 h-5" />
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {onFinish && (
+            <button
+              type="button"
+              onClick={onFinish}
+              disabled={isLoading}
+              className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              暂时学到这里
+            </button>
+          )}
+          {learningMode === 'guide' && (
+            <button
+              onClick={onPractice || onNext}
+              disabled={isLoading}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:shadow-none disabled:hover:translate-y-0 flex items-center gap-2"
+            >
+              <span>可选：做 3 道题查漏</span>
+              <ArrowRight className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 追问弹窗 */}
@@ -140,6 +159,7 @@ export default function ExplainStep({
         subject={subject || ''}
         topic={topic || ''}
         context={content}
+        mode={learningMode}
       />
     </div>
   );

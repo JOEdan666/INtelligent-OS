@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BookOpen, CheckCircle, XCircle, RotateCcw, RefreshCw } from 'lucide-react'
 import MarkdownRenderer from '../MarkdownRenderer'
@@ -15,6 +15,14 @@ interface Question {
 }
 
 import { MOCK_QUESTIONS_DATABASE } from '../../data/mockQuestions';
+
+const questionRequestCache = new Map<string, Promise<Question[]>>()
+const LOADING_MESSAGES = [
+  '提取核心概念',
+  '生成两道选择题',
+  '生成一道主动回忆题',
+  '检查答案与题目格式',
+] as const
 
 // 纯API驱动的题目生成 - 不再使用固定模板
 const generateQuestionsFromAPI = async (
@@ -60,90 +68,26 @@ const generateQuestionsFromAPI = async (
       const controller = new AbortController()
       const timeoutId = setTimeout(() => {
         controller.abort()
-      }, 180000) // 延长到3分钟超时
+      }, 25000)
       
-      const response = await fetch('/api/openai-chat?stream=true', {
+      const response = await fetch('/api/openai-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          purpose: 'quiz',
+          max_tokens: 900,
+          temperature: 0.2,
+          response_format: 'json_object',
           messages: [
             {
               role: 'system',
-              content: `你是一位资深的 ${grade || '中学'} ${semester || ''} ${subject || '全学科'} 命题专家，熟悉 ${region || '全国通用'} 地区的考试风格与课程标准。
-请生成 3 道高质量考试题（极速诊断模式）。
-
-## 🎯 命题原则
-1. **严格匹配年级**：基于 **${grade || '中学'}** 知识体系，**禁止超纲**。计算数据要凑整。
-2. **聚焦核心考点**：题目必须考查该知识点的核心内容和高频考点。
-3. **突出易错易混**：设计干扰项时要针对学生常见的错误理解和思维陷阱。
-
-## 📋 题目要求
-**题型分布：**
-- 2 道选择题：考查核心概念和易错点
-- 1 道填空/简答题：考查解题关键步骤和核心公式
-
-**质量标准：**
-- **干扰项设计**：必须基于学生常见错误，有针对性地设计迷惑选项
-- **解析要求**：
-  - 明确指出本题考查的**核心考点**
-  - 说明**解题的关键步骤**和突破口
-  - 分析**易错点**：为什么学生容易选错？错在哪里？
-  - 给出**记忆技巧**或**快速判断方法**（如有）
-- **言简意赅**：题目表述简洁明了，不加入不必要的背景描述
-
-**难度分布：**
-- 基础题（40%）：直接考查核心概念
-- 中等题（60%）：需要推理或计算
-${grade === '八年级' ? '- 八年级题目侧重基础理解和简单应用' : ''}
-
----
-
-请严格按照以下 JSON 格式输出：
-
-{
-  "questions": [
-    {
-      "id": 1,
-      "subject": "${subject || '物理'}",
-      "question": "题目内容（简洁明了）",
-      "type": "multiple_choice",
-      "options": ["A. 选项1", "B. 选项2", "C. 选项3", "D. 选项4"],
-      "correctAnswer": "C",
-      "explanation": "【考点】xxx\\n【解题关键】xxx\\n【易错分析】xxx\\n【技巧】xxx",
-      "points": 10,
-      "difficulty": "基础"
-    }
-  ]
-}
-
-## ⚠️ 重要提醒
-1. 严格输出 **JSON 格式**，不添加任何额外文字。
-2. 解析必须包含：考点、解题关键、易错分析。
-3. 题目语言简洁，不要有多余的废话和背景描述。
-4. 不要举不必要的生活例子，聚焦于学科知识本身。`
+              content: `你是命题专家。只返回 JSON 对象，不要 Markdown。生成恰好 3 道题：2 道选择题、1 道简答题。题目紧扣主题且互不重复；选择题必须有 4 个短选项。每题解析不超过 80 个汉字，只说明考点、正确原因和一个易错点。字段固定为 id、question、type、options、correctAnswer、explanation、points；type 只能是 multiple_choice 或 short_answer。`
             },
             {
               role: 'user',
-              content: `请根据以下学习内容生成3道高质量的考试题目：
-
-**学习主题：** ${topic || '未指定'}
-**适用年级：** ${grade || '中学'}
-**学科领域：** ${subject || '数学'}
-**地区要求：** ${region || '通用'}
-
-**学习内容：**
-${content}
-
-**特别要求：**
-1. 题目必须紧扣上述学习内容
-2. 难度适合${grade || '中学'}学生
-3. 体现${region || '通用'}地区的考试特色
-4. 确保科学性和准确性
-5. 提供详细的解析和评分标准
-
-请严格按照JSON格式输出，生成3道题目。`
+              content: `主题：${topic || '未指定'}\n领域：${subject || '通用'}\n水平：${grade || '未指定'}\n材料摘要：${content.slice(0, 2200)}\n\n输出格式：{"questions":[{"id":1,"question":"...","type":"multiple_choice","options":["A. ...","B. ...","C. ...","D. ..."],"correctAnswer":"A","explanation":"...","points":10}]}`
             }
           ]
         }),
@@ -158,25 +102,9 @@ ${content}
         throw new Error(`API请求失败: ${response.status} ${response.statusText}\n详细信息: ${errorText}`)
       }
 
-      // 读取流式响应
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      let fullContent = ''
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          const chunk = decoder.decode(value, { stream: true })
-          fullContent += chunk
-          onProgress?.(fullContent)
-        }
-      } else {
-        // 降级处理：非流式响应
-        const data = await response.json()
-        fullContent = data.content
-        onProgress?.(fullContent)
-      }
+      const data = await response.json()
+      const fullContent = String(data.content || '')
+      onProgress?.(fullContent)
 
     console.log('API完整响应长度:', fullContent.length)
 
@@ -231,7 +159,7 @@ ${content}
     
     // 处理超时错误
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('题目生成超时（超过3分钟），请检查网络连接后重试')
+      throw new Error('题目生成超过 25 秒，请重试')
     }
     
     throw error
@@ -255,17 +183,10 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
   const [answers, setAnswers] = useState<string[]>([])
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
-  const [streamingText, setStreamingText] = useState('')
+  const [generationElapsed, setGenerationElapsed] = useState(0)
+  const [generationError, setGenerationError] = useState('')
   const [timeElapsed, setTimeElapsed] = useState(0)
   const [isCompleted, setIsCompleted] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  // 自动滚动到底部
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [streamingText])
 
   // 计时器
   useEffect(() => {
@@ -278,10 +199,11 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
   }, [isLoading, isCompleted])
 
   // 生成题目
-  const generateQuestions = async (forceRefresh = false) => {
+  const generateQuestions = useCallback(async (forceRefresh = false) => {
     try {
       setIsLoading(true)
-      setStreamingText('')
+      setGenerationElapsed(0)
+      setGenerationError('')
       console.log('=== 开始生成题目 ===', { forceRefresh })
       
       // 优先命中缓存，命中则秒回（除非强制刷新）
@@ -311,18 +233,27 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
         throw new Error(errorMsg)
       }
       
-      // 直接调用API或本地Mock生成题目
-      const questions = await generateQuestionsFromAPI(
-        knowledgeContent, 
-        topic, 
-        region, 
-        grade, 
-        subject, 
-        semester, 
-        topicId,
-        (text) => setStreamingText(text), // 实时更新流式文本
-        forceRefresh // 传递是否跳过Mock
-      )
+      const requestKey = [knowledgeContent.slice(0, 500), topic, region, grade, subject, semester, topicId].join('|')
+      let request = forceRefresh ? undefined : questionRequestCache.get(requestKey)
+      if (!request) {
+        request = generateQuestionsFromAPI(
+          knowledgeContent,
+          topic,
+          region,
+          grade,
+          subject,
+          semester,
+          topicId,
+          undefined,
+          forceRefresh,
+        )
+        questionRequestCache.set(requestKey, request)
+        void request.then(
+          () => questionRequestCache.delete(requestKey),
+          () => questionRequestCache.delete(requestKey),
+        )
+      }
+      const questions = await request
       
       console.log('=== 题目生成成功 ===')
       console.log('生成题目数量:', questions.length)
@@ -339,24 +270,23 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
       console.error('=== 题目生成失败 ===')
       const errorMessage = error instanceof Error ? error.message : '未知错误'
       
-      if (errorMessage.includes('fetch') || errorMessage.includes('timeout') || errorMessage.includes('network')) {
-        alert(`网络连接问题：\n\n题目生成需要较长时间，请确保网络连接稳定并耐心等待。\n\n如果问题持续存在，请稍后重试。`)
-      } else if (errorMessage.includes('API请求失败')) {
-        alert(`服务暂时不可用：\n\n${errorMessage}\n\n请稍后重试，或联系技术支持。`)
-      } else {
-        alert(`题目生成遇到问题：\n\n${errorMessage}\n\n建议：\n1. 检查学习内容是否完整\n2. 稍后重试\n3. 如问题持续存在，请联系技术支持`)
-      }
-      
+      setGenerationError(errorMessage)
       setQuestions([])
       setAnswers([])
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [grade, knowledgeContent, region, semester, subject, topic, topicId])
 
   useEffect(() => {
-    generateQuestions()
-  }, [knowledgeContent, region, grade, semester, subject, topic, topicId])
+    void generateQuestions()
+  }, [generateQuestions])
+
+  useEffect(() => {
+    if (!isLoading) return
+    const timer = window.setInterval(() => setGenerationElapsed((value) => value + 1), 1000)
+    return () => window.clearInterval(timer)
+  }, [isLoading])
 
   // 处理提交单题
   const handleAnswerSelect = (answer: string) => {
@@ -406,18 +336,11 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
 
   // Loading Steps State
   const [loadingStep, setLoadingStep] = useState(0)
-  const loadingMessages = [
-    "Analyzing learning content and key points...",
-    "Building question structure and difficulty layers...",
-    "Generating distractors and detailed explanations...",
-    "Performing final quality checks..."
-  ]
-
   // Cycle through loading messages
   useEffect(() => {
     if (isLoading) {
       const interval = setInterval(() => {
-        setLoadingStep(prev => (prev + 1) % loadingMessages.length)
+        setLoadingStep(prev => (prev + 1) % LOADING_MESSAGES.length)
       }, 3000)
       return () => clearInterval(interval)
     }
@@ -432,7 +355,8 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
           <BookOpen className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-[var(--accent)] w-8 h-8" />
         </div>
         
-        <h3 className="text-xl font-medium text-highlight mb-2 tracking-tight">AI Generating Quiz</h3>
+        <h3 className="text-xl font-medium text-highlight mb-2 tracking-tight">正在生成 3 道诊断题</h3>
+        <p className="mb-4 text-xs text-text-secondary">已用时 {generationElapsed} 秒，通常 3—8 秒完成</p>
         
         <div className="h-8 overflow-hidden relative w-full text-center">
           <AnimatePresence mode='wait'>
@@ -443,7 +367,7 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
               exit={{ opacity: 0, y: -10 }}
               className="text-text-secondary font-light"
             >
-              {loadingMessages[loadingStep]}
+              {LOADING_MESSAGES[loadingStep]}
             </motion.p>
           </AnimatePresence>
         </div>
@@ -469,14 +393,14 @@ export default function QuizStep({ knowledgeContent, region, grade, semester, su
         <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mb-6">
           <XCircle className="w-8 h-8 text-red-500" />
         </div>
-        <h3 className="text-xl font-semibold text-highlight mb-2">Generation Failed</h3>
-        <p className="text-text-secondary mb-6 max-w-md text-center font-light">Network issue or AI service is busy. Please try again later.</p>
+        <h3 className="text-xl font-semibold text-highlight mb-2">题目生成失败</h3>
+        <p className="text-text-secondary mb-6 max-w-md text-center font-light">{generationError || 'AI 服务暂时不可用，请重试。'}</p>
         <button 
           onClick={() => generateQuestions(true)}
           className="apple-btn flex items-center gap-2"
         >
           <RotateCcw className="w-4 h-4" />
-          Retry
+          重新生成
         </button>
       </div>
     )

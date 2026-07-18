@@ -10,13 +10,17 @@ datasource db {
 
 model LearningItem {
   id        String   @id @default(cuid())
+  userId    String?
   text      String
   subject   String
   createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model KnowledgeBaseItem {
   id           String   @id @default(cuid())
+  userId       String?
   name         String
   type         String
   size         Int
@@ -29,6 +33,7 @@ model KnowledgeBaseItem {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  @@index([userId, createdAt])
   @@map("knowledge_base_items")
 }
 
@@ -36,7 +41,7 @@ model LearningSession {
   id               String         @id @default(cuid())
   conversationId   String         @unique
   conversation     Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  userId           String?        // Linked to UserProfile.id (Optional for migration)
+  userId           String? // Linked to UserProfile.id (Optional for migration)
   subject          String
   topic            String
   aiExplanation    String?
@@ -99,60 +104,61 @@ model UserAnswer {
 }
 
 model LearningStats {
-  id              String   @id @default(cuid())
-  conversationId  String   @unique
-  userId          String?  // Linked to UserProfile.id
-  totalQuestions  Int      @default(0)
-  correctAnswers  Int      @default(0)
-  totalScore      Int      @default(0)
-  maxScore        Int      @default(0)
-  accuracy        Float    @default(0)
-  totalTimeSpent  Int      @default(0)
-  explanationTime Int      @default(0)
-  coachingTime    Int      @default(0)
-  quizTime        Int      @default(0)
+  id              String    @id @default(cuid())
+  conversationId  String    @unique
+  userId          String? // Linked to UserProfile.id
+  totalQuestions  Int       @default(0)
+  correctAnswers  Int       @default(0)
+  totalScore      Int       @default(0)
+  maxScore        Int       @default(0)
+  accuracy        Float     @default(0)
+  totalTimeSpent  Int       @default(0)
+  explanationTime Int       @default(0)
+  coachingTime    Int       @default(0)
+  quizTime        Int       @default(0)
   weaknesses      Json?
   suggestions     Json?
   // Streak tracking fields
-  currentStreak   Int      @default(0)
-  longestStreak   Int      @default(0)
+  currentStreak   Int       @default(0)
+  longestStreak   Int       @default(0)
   lastActiveDate  DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
+  @@index([userId, updatedAt])
   @@map("learning_stats")
 }
 
 // --- RAG System Models ---
 
 model KnowledgeChunk {
-  id        String   @id @default(cuid())
-  content   String
+  id      String @id @default(cuid())
+  content String
   // Use Unsupported type for pgvector. 
   // IMPORTANT: You must run `CREATE EXTENSION IF NOT EXISTS vector;` in your DB.
   // vector    Unsupported("vector(1536)")?
-  
+
   // Metadata
-  type      String   // ChunkType: SYLLABUS, EXAM_PROFILE, TEMPLATE, PITFALL
-  subject   String
-  grade     String?
-  region    String?
-  tags      String[] // Stored as array of strings
-  
+  type    String // ChunkType: SYLLABUS, EXAM_PROFILE, TEMPLATE, PITFALL
+  subject String
+  grade   String?
+  region  String?
+  tags    String[] // Stored as array of strings
+
   createdAt DateTime @default(now())
-  
+
   @@map("knowledge_chunks")
 }
 
 model LocalExamProfile {
-  id        String   @id @default(cuid())
-  region    String
-  subject   String
-  year      Int
-  
+  id      String @id @default(cuid())
+  region  String
+  subject String
+  year    Int
+
   // JSON structure: { knowledgeDistribution: {}, questionTypeRatio: {}, bloomTaxonomy: {} }
   profileData Json
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -161,33 +167,33 @@ model LocalExamProfile {
 }
 
 model QuestionBank {
-  id          String   @id @default(cuid())
+  id      String @id @default(cuid())
   // Structure: { stem: string, options?: [], answer: string, analysis: string, points: number }
-  content     Json
-  hash        String   @unique // MD5 of content.stem to prevent duplicates
-  
-  subject     String
-  grade       String
-  region      String
-  difficulty  Float
+  content Json
+  hash    String @unique // MD5 of content.stem to prevent duplicates
+
+  subject         String
+  grade           String
+  region          String
+  difficulty      Float
   knowledgePoints String[]
-  
-  qcStatus    String   @default("PENDING") // PENDING, PASSED, FAILED
-  qcLog       Json?    // Array of QC check results
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+
+  qcStatus String @default("PENDING") // PENDING, PASSED, FAILED
+  qcLog    Json? // Array of QC check results
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("question_bank")
 }
 
 model QuestionQC {
-  id            String   @id @default(cuid())
-  questionId    String
-  result        String   // PASS, FAIL
-  checkType     String   // FORMAT, LOGIC, CONTENT_MODEL
-  details       String?
-  createdAt     DateTime @default(now())
+  id         String   @id @default(cuid())
+  questionId String
+  result     String // PASS, FAIL
+  checkType  String // FORMAT, LOGIC, CONTENT_MODEL
+  details    String?
+  createdAt  DateTime @default(now())
 
   @@index([questionId])
   @@map("question_qc_runs")
@@ -196,14 +202,14 @@ model QuestionQC {
 // --- User System Models ---
 
 model UserProfile {
-  id        String   @id // Corresponds to Clerk User ID
-  email     String   @unique
-  name      String?
-  grade     String?  
-  region    String?  
-  goals     String[]
-  preferences Json?  // Learning preferences: { style: 'visual', difficulty: 'hard' }
-  
+  id          String   @id // Corresponds to Clerk User ID
+  email       String   @unique
+  name        String?
+  grade       String?
+  region      String?
+  goals       String[]
+  preferences Json? // Learning preferences: { style: 'visual', difficulty: 'hard' }
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -211,28 +217,28 @@ model UserProfile {
 }
 
 model Conversation {
-  id            String   @id @default(cuid())
-  userId        String
-  title         String
-  type          String   // 'learning' | 'general'
-  messages      Json     // Array of ChatMessage
-  
+  id       String @id @default(cuid())
+  userId   String
+  title    String
+  type     String // 'learning' | 'general'
+  messages Json // Array of ChatMessage
+
   // Metadata
-  messageCount  Int      @default(0)
-  lastActivity  DateTime @default(now())
-  isArchived    Boolean  @default(false)
-  tags          String[]
-  
+  messageCount Int      @default(0)
+  lastActivity DateTime @default(now())
+  isArchived   Boolean  @default(false)
+  tags         String[]
+
   // Learning specific
   subject       String?
   topic         String?
-  aiExplanation String?  @db.Text
-  
+  aiExplanation String? @db.Text
+
   // Relations
   learningSession LearningSession?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([lastActivity])
@@ -242,31 +248,31 @@ model Conversation {
 // --- Wrong Question Module ---
 
 model WrongQuestion {
-  id              String   @id @default(cuid())
-  userId          String   // Linked to UserProfile.id
+  id     String @id @default(cuid())
+  userId String // Linked to UserProfile.id
 
-  subject         String
-  question        String   @db.Text
-  correctAnswer   String?  @db.Text
-  userAnswer      String?  @db.Text
-  analysis        String?  @db.Text
-  source          String?
-  tags            String[]
-  imageUrls       String[]
-  answerImageUrls String[]
-  aiAnalysis      Json?
-  knowledgePoints String[]
-  relatedNotes    String[]
+  subject          String
+  question         String    @db.Text
+  correctAnswer    String?   @db.Text
+  userAnswer       String?   @db.Text
+  analysis         String?   @db.Text
+  source           String?
+  tags             String[]
+  imageUrls        String[]
+  answerImageUrls  String[]
+  aiAnalysis       Json?
+  knowledgePoints  String[]
+  relatedNotes     String[]
   relatedQuestions String[]
-  stage           Int      @default(0)
-  nextReviewAt    DateTime
-  lastReviewedAt  DateTime?
-  reviewHistory   Json?
-  reviewCount     Int      @default(0)
-  status          String   @default("active")
-  isFavorite      Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  stage            Int       @default(0)
+  nextReviewAt     DateTime
+  lastReviewedAt   DateTime?
+  reviewHistory    Json?
+  reviewCount      Int       @default(0)
+  status           String    @default("active")
+  isFavorite       Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([subject])
   @@index([nextReviewAt])
@@ -279,7 +285,7 @@ model WrongQuestion {
 
 model Note {
   id               String      @id @default(cuid())
-  userId           String?     // Linked to UserProfile.id
+  userId           String? // Linked to UserProfile.id
   title            String
   icon             String?
   cover            String?
@@ -299,7 +305,28 @@ model Note {
   @@index([updatedAt])
   @@index([isFavorite])
   @@index([isArchived])
+  @@index([userId, updatedAt])
   @@map("notes")
+}
+
+model ReviewCard {
+  id              String    @id @default(cuid())
+  userId          String
+  sourceSessionId String?
+  subject         String
+  topic           String
+  prompt          String    @db.Text
+  answer          String    @db.Text
+  stage           Int       @default(0)
+  nextReviewAt    DateTime  @default(now())
+  lastReviewedAt  DateTime?
+  reviewCount     Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId, nextReviewAt])
+  @@index([sourceSessionId])
+  @@map("review_cards")
 }
 
 model NoteBlock {
@@ -321,28 +348,28 @@ model NoteBlock {
 // --- Intelligent Partner ---
 
 model PartnerSession {
-  id               String   @id @default(cuid())
-  userId           String?  // 登录用户
-  guestId          String?  // 游客标识
+  id      String  @id @default(cuid())
+  userId  String? // 登录用户
+  guestId String? // 游客标识
 
-  mode             String   @default("Study") // Study | Work | Brainstorm
-  topic            String?
-  goal             String?
+  mode  String  @default("Study") // Study | Work | Brainstorm
+  topic String?
+  goal  String?
 
-  pageUrl          String?
-  pageTitle        String?
-  pageDomain       String?
-  contextSnippet   String?  @db.Text
+  pageUrl        String?
+  pageTitle      String?
+  pageDomain     String?
+  contextSnippet String? @db.Text
 
   recentSignalsJson String? @db.Text // JSON string
 
-  status           String   @default("draft") // draft | saved | archived
+  status String @default("draft") // draft | saved | archived
 
-  messages         PartnerMessage[]
-  assets           PartnerAsset[]
+  messages PartnerMessage[]
+  assets   PartnerAsset[]
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([guestId])
@@ -351,35 +378,35 @@ model PartnerSession {
 }
 
 model PartnerMessage {
-  id            String   @id @default(cuid())
-  sessionId     String
-  session       PartnerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id        String         @id @default(cuid())
+  sessionId String
+  session   PartnerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  role          String   // user | assistant
-  content       String   @db.Text // 纯文本内容
-  contentJson   String?  @db.Text // 结构化 JSON（tldr/reasoning/actions/citations）
-  citationsJson String?  @db.Text // 引用 JSON
+  role          String // user | assistant
+  content       String  @db.Text // 纯文本内容
+  contentJson   String? @db.Text // 结构化 JSON（tldr/reasoning/actions/citations）
+  citationsJson String? @db.Text // 引用 JSON
 
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([sessionId])
 }
 
 model PartnerAsset {
-  id             String   @id @default(cuid())
-  sessionId      String
-  session        PartnerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id        String         @id @default(cuid())
+  sessionId String
+  session   PartnerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  type           String   // insight | action | idea | risk | summary
-  title          String
-  contentJson    String   @db.Text // 资产内容 JSON
+  type            String // insight | action | idea | risk | summary
+  title           String
+  contentJson     String  @db.Text // 资产内容 JSON
   actionItemsJson String? @db.Text // 行动项（带 checked 状态）
-  citationsJson  String?  @db.Text
+  citationsJson   String? @db.Text
 
-  status         String   @default("draft") // draft | saved
+  status String @default("draft") // draft | saved
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([sessionId])
   @@index([type])
@@ -396,21 +423,21 @@ model Visit {
 // --- Idea Validator Models ---
 
 model IdeaValidation {
-  id              String   @id @default(cuid())
-  userId          String   // Corresponds to Clerk User ID
-  
-  originalIdea    String   @db.Text
-  refinedIdea     String?  @db.Text // Idea after clarification chat
-  
-  score           Int      @default(0)
-  verdict         String   @db.Text
-  reportJson      Json     // The complete generated report
-  
-  status          String   @default("VALIDATED") // VALIDATED, BUILDING, DROPPED, LAUNCHED
-  isPublic        Boolean  @default(false) // If true, shows up on the Idea Wall
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id     String @id @default(cuid())
+  userId String // Corresponds to Clerk User ID
+
+  originalIdea String  @db.Text
+  refinedIdea  String? @db.Text // Idea after clarification chat
+
+  score      Int    @default(0)
+  verdict    String @db.Text
+  reportJson Json // The complete generated report
+
+  status   String  @default("VALIDATED") // VALIDATED, BUILDING, DROPPED, LAUNCHED
+  isPublic Boolean @default(false) // If true, shows up on the Idea Wall
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([status])

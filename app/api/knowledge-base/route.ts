@@ -2,16 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/app/lib/prisma'
 import { memoryDB } from '@/app/lib/memory-db'
 import { clearDbUnavailable, noteDbUnavailable, shouldUseLocalDb } from '@/app/lib/db-fallback'
+import { getAuthenticatedUserId, unauthorizedResponse } from '@/app/lib/auth-user'
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+
     if (shouldUseLocalDb()) {
-      const items = await memoryDB.getKnowledgeBaseItems()
+      const items = await memoryDB.getKnowledgeBaseItems(userId)
       return NextResponse.json({ success: true, data: items, source: 'local' })
     }
 
     // 获取知识库文件列表
     const items = await prisma.knowledgeBaseItem.findMany({
+      where: { userId },
       orderBy: { createdAt: 'desc' }
     })
     clearDbUnavailable()
@@ -25,7 +30,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: serializedItems })
   } catch (error) {
     if (noteDbUnavailable(error)) {
-      const items = await memoryDB.getKnowledgeBaseItems()
+      const userId = await getAuthenticatedUserId()
+      if (!userId) return unauthorizedResponse()
+      const items = await memoryDB.getKnowledgeBaseItems(userId)
       return NextResponse.json({ success: true, data: items, source: 'local' })
     }
 
@@ -39,8 +46,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   let items: any[] = []
+  let ownerId = ''
 
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+    ownerId = userId
+
     const body = await request.json()
     items = body.items
     
@@ -51,11 +63,10 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // 不再验证用户ID，直接使用匿名保存
-    
     // 批量创建知识库文件
     const itemsToCreate = items.map((item: any) => ({
       id: item.id,
+      userId,
       name: item.name,
       type: item.type,
       size: item.size,
@@ -85,6 +96,7 @@ export async function POST(request: NextRequest) {
     // 查询刚创建的项目
     const createdItems = await prisma.knowledgeBaseItem.findMany({
       where: {
+        userId,
         id: {
           in: items.map((item: any) => item.id)
         }
@@ -106,6 +118,7 @@ export async function POST(request: NextRequest) {
     if (noteDbUnavailable(error) && Array.isArray(items) && items.length > 0) {
       const itemsToCreate = items.map((item: any) => ({
         id: item.id,
+        userId: ownerId,
         name: item.name,
         type: item.type,
         size: item.size,
@@ -143,9 +156,16 @@ export async function PUT(request: NextRequest) {
   let updates: Record<string, unknown> = {}
 
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+
     const body = await request.json()
     id = body.id
-    updates = body.updates || {}
+    const requestedUpdates = body.updates || {}
+    const allowedFields = ['name', 'type', 'size', 'lastModified', 'text', 'ocrText', 'notes', 'dataUrl', 'include']
+    updates = Object.fromEntries(
+      Object.entries(requestedUpdates).filter(([key]) => allowedFields.includes(key))
+    )
     
     if (!id) {
       return NextResponse.json(
@@ -155,7 +175,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (shouldUseLocalDb()) {
-      const updatedItem = await memoryDB.updateKnowledgeBaseItem(id, updates)
+      const updatedItem = await memoryDB.updateKnowledgeBaseItem(id, updates, userId)
       return NextResponse.json({
         success: true,
         data: updatedItem,
@@ -166,7 +186,7 @@ export async function PUT(request: NextRequest) {
     
     // 更新知识库文件
     const updatedItem = await prisma.knowledgeBaseItem.update({
-      where: { id },
+      where: { id, userId },
       data: updates
     })
     clearDbUnavailable()
@@ -184,7 +204,9 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error) {
     if (noteDbUnavailable(error) && id) {
-      const updatedItem = await memoryDB.updateKnowledgeBaseItem(id, updates)
+      const userId = await getAuthenticatedUserId()
+      if (!userId) return unauthorizedResponse()
+      const updatedItem = await memoryDB.updateKnowledgeBaseItem(id, updates, userId)
       return NextResponse.json({
         success: true,
         data: updatedItem,
@@ -203,10 +225,13 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (shouldUseLocalDb()) {
-      await memoryDB.deleteKnowledgeBaseItem(id || undefined)
+      await memoryDB.deleteKnowledgeBaseItem(id || undefined, userId)
       return NextResponse.json({
         success: true,
         message: id ? '文件删除成功' : '所有文件删除成功',
@@ -216,7 +241,7 @@ export async function DELETE(request: NextRequest) {
     if (id) {
       // 删除单个文件
       await prisma.knowledgeBaseItem.delete({
-        where: { id }
+        where: { id, userId }
       })
       clearDbUnavailable()
       
@@ -226,7 +251,7 @@ export async function DELETE(request: NextRequest) {
       })
     } else {
       // 删除所有文件
-      await prisma.knowledgeBaseItem.deleteMany({})
+      await prisma.knowledgeBaseItem.deleteMany({ where: { userId } })
       clearDbUnavailable()
       
       return NextResponse.json({ 
@@ -238,7 +263,9 @@ export async function DELETE(request: NextRequest) {
     if (noteDbUnavailable(error)) {
       const { searchParams } = new URL(request.url)
       const id = searchParams.get('id')
-      await memoryDB.deleteKnowledgeBaseItem(id || undefined)
+      const userId = await getAuthenticatedUserId()
+      if (!userId) return unauthorizedResponse()
+      await memoryDB.deleteKnowledgeBaseItem(id || undefined, userId)
       return NextResponse.json({
         success: true,
         message: id ? '文件删除成功' : '所有文件删除成功',

@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 
 export interface LearningProgressData {
+  userId: string;
   conversationId: string;
   subject: string;
   topic: string;
@@ -54,8 +55,8 @@ export class LearningProgressService {
   // 保存学习进度
   static async saveLearningProgress(data: LearningProgressData) {
     try {
-      const existingSession = await prisma.learningSession.findUnique({
-        where: { conversationId: data.conversationId }
+      const existingSession = await prisma.learningSession.findFirst({
+        where: { conversationId: data.conversationId, userId: data.userId }
       });
 
       if (existingSession) {
@@ -65,6 +66,7 @@ export class LearningProgressService {
           data: {
             // 防止将必填字段置为空字符串
             subject: data.subject || existingSession.subject,
+            userId: data.userId,
             topic: data.topic || existingSession.topic,
             region: data.region || existingSession.region,
             grade: data.grade || existingSession.grade,
@@ -85,6 +87,7 @@ export class LearningProgressService {
         return await prisma.learningSession.create({
           data: {
             conversationId: data.conversationId,
+            userId: data.userId,
             subject: data.subject,
             topic: data.topic,
             region: data.region,
@@ -114,10 +117,10 @@ export class LearningProgressService {
   }
 
   // 获取学习进度（包含关联的练习题和答案）
-  static async getLearningProgress(conversationId: string) {
+  static async getLearningProgress(conversationId: string, userId?: string) {
     try {
-      return await prisma.learningSession.findUnique({
-        where: { conversationId },
+      return await prisma.learningSession.findFirst({
+        where: { conversationId, ...(userId ? { userId } : {}) },
         include: {
           quizQuestions: {
             orderBy: { order: 'asc' },
@@ -135,13 +138,13 @@ export class LearningProgressService {
   }
 
   // 更新AI讲解内容
-  static async updateAIExplanation(conversationId: string, aiExplanation: string) {
+  static async updateAIExplanation(conversationId: string, userId: string, aiExplanation: string) {
     try {
       // 优先更新已存在会话；若不存在，创建占位但不写空字符串
-      const exists = await prisma.learningSession.findUnique({ where: { conversationId } });
+      const exists = await prisma.learningSession.findFirst({ where: { conversationId, userId } });
       if (exists) {
         return await prisma.learningSession.update({
-          where: { conversationId },
+          where: { id: exists.id },
           data: {
             aiExplanation,
             currentStep: 'EXPLAIN',
@@ -152,6 +155,7 @@ export class LearningProgressService {
       return await prisma.learningSession.create({
         data: {
           conversationId,
+          userId,
           subject: '未设置',
           topic: '未设置',
           aiExplanation,
@@ -165,13 +169,13 @@ export class LearningProgressService {
   }
 
   // 更新苏格拉底对话内容
-  static async updateSocraticDialogue(conversationId: string, socraticDialogue: any) {
+  static async updateSocraticDialogue(conversationId: string, userId: string, socraticDialogue: any) {
     try {
       // 优先更新已存在会话；若不存在，创建占位但不写空字符串
-      const exists = await prisma.learningSession.findUnique({ where: { conversationId } });
+      const exists = await prisma.learningSession.findFirst({ where: { conversationId, userId } });
       if (exists) {
         return await prisma.learningSession.update({
-          where: { conversationId },
+          where: { id: exists.id },
           data: {
             socraticDialogue,
             currentStep: 'COACH',
@@ -182,6 +186,7 @@ export class LearningProgressService {
       return await prisma.learningSession.create({
         data: {
           conversationId,
+          userId,
           subject: '未设置',
           topic: '未设置',
           socraticDialogue,
@@ -195,11 +200,9 @@ export class LearningProgressService {
   }
 
   // 删除学习进度
-  static async deleteLearningProgress(conversationId: string) {
+  static async deleteLearningProgress(conversationId: string, userId: string) {
     try {
-      return await prisma.learningSession.delete({
-        where: { conversationId }
-      });
+      return await prisma.learningSession.deleteMany({ where: { conversationId, userId } });
     } catch (error) {
       console.error('删除学习进度失败:', error);
       throw new Error('删除学习进度失败');
@@ -291,7 +294,7 @@ export class LearningProgressService {
   }
 
   // 更新或创建学习统计
-  static async updateLearningStats(conversationId: string, statsData: {
+  static async updateLearningStats(conversationId: string, userId: string, statsData: {
     totalQuestions?: number;
     correctAnswers?: number;
     totalScore?: number;
@@ -344,6 +347,7 @@ export class LearningProgressService {
       return await prisma.learningStats.upsert({
         where: { conversationId },
         update: {
+          userId,
           ...statsData,
           currentStreak,
           longestStreak,
@@ -352,6 +356,7 @@ export class LearningProgressService {
         },
         create: {
           conversationId,
+          userId,
           totalQuestions: statsData.totalQuestions || 0,
           correctAnswers: statsData.correctAnswers || 0,
           totalScore: statsData.totalScore || 0,
@@ -375,12 +380,13 @@ export class LearningProgressService {
   }
 
   // 获取全局学习统计（用于Dashboard）
-  static async getGlobalLearningStats() {
+  static async getGlobalLearningStats(userId: string) {
     try {
       // Get aggregate stats across all sessions
       const [sessionCount, statsAgg, recentSessions] = await Promise.all([
-        prisma.learningSession.count(),
+        prisma.learningSession.count({ where: { userId } }),
         prisma.learningStats.aggregate({
+          where: { userId },
           _sum: {
             totalQuestions: true,
             correctAnswers: true,
@@ -395,6 +401,7 @@ export class LearningProgressService {
           }
         }),
         prisma.learningSession.findMany({
+          where: { userId },
           take: 10,
           orderBy: { createdAt: 'desc' },
           select: {
@@ -410,13 +417,14 @@ export class LearningProgressService {
       // Get subject breakdown
       const subjectBreakdown = await prisma.learningSession.groupBy({
         by: ['subject'],
+        where: { userId },
         _count: { id: true },
         orderBy: { _count: { id: 'desc' } }
       });
 
       // Calculate completion rate
       const completedSessions = await prisma.learningSession.count({
-        where: { isCompleted: true }
+        where: { userId, isCompleted: true }
       });
       const completionRate = sessionCount > 0 ? Math.round((completedSessions / sessionCount) * 100) : 0;
 
@@ -443,10 +451,10 @@ export class LearningProgressService {
   }
 
   // 获取学习统计
-  static async getLearningStats(conversationId: string) {
+  static async getLearningStats(conversationId: string, userId?: string) {
     try {
-      return await prisma.learningStats.findUnique({
-        where: { conversationId }
+      return await prisma.learningStats.findFirst({
+        where: { conversationId, ...(userId ? { userId } : {}) }
       });
     } catch (error) {
       console.error('获取学习统计失败:', error);
@@ -455,11 +463,11 @@ export class LearningProgressService {
   }
 
   // 获取完整的学习数据（包含所有关联数据）
-  static async getCompleteLearningData(conversationId: string) {
+  static async getCompleteLearningData(conversationId: string, userId?: string) {
     try {
       const [session, stats] = await Promise.all([
-        this.getLearningProgress(conversationId),
-        this.getLearningStats(conversationId)
+        this.getLearningProgress(conversationId, userId),
+        this.getLearningStats(conversationId, userId)
       ]);
 
       return {
@@ -473,9 +481,10 @@ export class LearningProgressService {
   }
 
   // 获取所有学习会话（用于学习历史页面）
-  static async getAllLearningSessions(limit: number = 50, offset: number = 0) {
+  static async getAllLearningSessions(userId: string, limit: number = 50, offset: number = 0) {
     try {
       return await prisma.learningSession.findMany({
+        where: { userId },
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
@@ -496,9 +505,10 @@ export class LearningProgressService {
   }
 
   // 获取所有用户答案（用于错题集）
-  static async getAllUserAnswers(limit: number = 100, offset: number = 0) {
+  static async getAllUserAnswers(userId: string, limit: number = 100, offset: number = 0) {
     try {
       return await prisma.userAnswer.findMany({
+        where: { session: { userId } },
         orderBy: { answeredAt: 'desc' },
         take: limit,
         skip: offset,
@@ -513,11 +523,11 @@ export class LearningProgressService {
   }
 
   // 根据conversationId获取用户答案
-  static async getUserAnswersByConversationId(conversationId: string) {
+  static async getUserAnswersByConversationId(conversationId: string, userId: string) {
     try {
       // 首先获取学习会话
-      const session = await prisma.learningSession.findUnique({
-        where: { conversationId }
+      const session = await prisma.learningSession.findFirst({
+        where: { conversationId, userId }
       });
 
       if (!session) {
@@ -540,6 +550,7 @@ export class LearningProgressService {
 
   // 直接保存用户答案（用于错题集等场景）
   static async saveDirectUserAnswer(data: {
+    userId: string;
     conversationId: string;
     questionText: string;
     userAnswer: string;
@@ -549,8 +560,8 @@ export class LearningProgressService {
   }) {
     try {
       // 首先获取或创建学习会话
-      let session = await prisma.learningSession.findUnique({
-        where: { conversationId: data.conversationId }
+      let session = await prisma.learningSession.findFirst({
+        where: { conversationId: data.conversationId, userId: data.userId }
       });
 
       if (!session) {
@@ -558,6 +569,7 @@ export class LearningProgressService {
         session = await prisma.learningSession.create({
           data: {
             conversationId: data.conversationId,
+            userId: data.userId,
             subject: '未知',
             topic: '练习题',
             currentStep: 'QUIZ'

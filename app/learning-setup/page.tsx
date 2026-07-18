@@ -1,129 +1,94 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Search } from 'lucide-react'
+import { FormEvent, Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { ArrowRight, BookOpen, Brain, Wrench } from 'lucide-react'
 
-import { SUBJECTS } from '../types'
-import { CurriculumService } from '../services/curriculumService'
+const MODES = [
+  { value: 'understand', label: '理解', description: '建立清晰模型，能用自己的话解释', icon: Brain },
+  { value: 'remember', label: '记住', description: '提炼关键事实，使用主动回忆巩固', icon: BookOpen },
+  { value: 'apply', label: '应用', description: '解决真实问题，形成下一步行动', icon: Wrench },
+] as const
 
-export default function LearningSetupPage() {
+function LearningSetupForm() {
   const router = useRouter()
-  const curriculum = useMemo(() => CurriculumService.getInstance(), [])
-  const [subject, setSubject] = useState('')
-  const [topic, setTopic] = useState('')
-  const [grade, setGrade] = useState('')
-  const [region, setRegion] = useState('')
-  const [suggestions, setSuggestions] = useState<Array<{ id: string; name: string }>>([])
+  const searchParams = useSearchParams()
+  const [topic, setTopic] = useState(searchParams.get('topic') || '')
+  const [mode, setMode] = useState(searchParams.get('goal') || 'understand')
+  const [context, setContext] = useState('')
 
-  useEffect(() => {
-    if (!subject || !grade || !region) {
-      setSuggestions([])
-      return
-    }
-    const standard = curriculum.getCurriculumStandard(region, grade, subject)
-    setSuggestions(standard ? standard.topics.map((item) => ({ id: item.id, name: item.name })) : [])
-  }, [subject, grade, region, curriculum])
-
-  const canStart = Boolean(subject.trim() && topic.trim())
-
-  const startLearning = () => {
-    if (!canStart) return
-
-    const params = new URLSearchParams()
-    params.set('subject', subject)
-    params.set('topic', topic)
-    if (grade) params.set('grade', grade)
-    if (region) params.set('region', region)
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!topic.trim()) return
+    const params = new URLSearchParams({ subject: '个人学习', topic: topic.trim(), goal: mode })
+    if (context.trim()) params.set('context', context.trim())
     router.push(`/learning-interface?${params.toString()}`)
   }
 
   return (
-    <div className="zen-page">
-      <section className="zen-panel px-6 py-8 md:px-10 md:py-10">
-        <div className="mb-8">
-          <span className="zen-chip">学习配置</span>
-          <h1 className="mt-3 text-2xl md:text-3xl font-semibold tracking-tight text-slate-900">配置一次专注学习</h1>
-          <p className="mt-2 text-slate-600 text-sm md:text-base">
-            只填写与学习目标直接相关的信息，其他在流程中按需补充。
-          </p>
-        </div>
+    <main className="zen-page max-w-4xl">
+      <header className="mb-8">
+        <span className="zen-chip">学习</span>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">从一个真实问题开始</h1>
+        <p className="mt-2 text-slate-600 dark:text-slate-300">不必先分类。说明你想学什么，以及学完要能做到什么。</p>
+      </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-          <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">学科</span>
-            <select value={subject} onChange={(event) => setSubject(event.target.value)} className="zen-select">
-              <option value="">请选择学科</option>
-              {SUBJECTS.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
+      <form onSubmit={handleSubmit} className="zen-panel p-6 md:p-8">
+        <label htmlFor="topic" className="text-sm font-medium text-slate-700 dark:text-slate-200">问题或主题</label>
+        <input
+          id="topic"
+          value={topic}
+          onChange={(event) => setTopic(event.target.value)}
+          placeholder="例如：如何为 AI 产品设计真正有效的留存指标？"
+          className="zen-input mt-2 min-h-12"
+          autoFocus
+        />
 
-          <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">年级</span>
-            <input
-              value={grade}
-              onChange={(event) => setGrade(event.target.value)}
-              placeholder="例如：初中二年级"
-              className="zen-input"
-            />
-          </label>
-
-          <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">地区</span>
-            <input
-              value={region}
-              onChange={(event) => setRegion(event.target.value)}
-              placeholder="例如：东莞"
-              className="zen-input"
-            />
-          </label>
-
-          <label className="block space-y-2">
-            <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
-              <Search className="w-4 h-4 text-slate-500" />
-              主题/知识点
-            </span>
-            <input
-              value={topic}
-              onChange={(event) => setTopic(event.target.value)}
-              placeholder="例如：机械运动"
-              className="zen-input"
-            />
-          </label>
-        </div>
-
-        {suggestions.length > 0 && (
-          <div className="mt-6">
-            <p className="mb-3 text-sm text-slate-600">根据已选条件推荐：</p>
-            <div className="flex flex-wrap gap-2">
-              {suggestions.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setTopic(item.name)}
-                  className="zen-button-secondary px-3.5 py-2 text-sm"
-                >
-                  {item.name}
-                </button>
-              ))}
-            </div>
+        <fieldset className="mt-7">
+          <legend className="text-sm font-medium text-slate-700 dark:text-slate-200">这次学习的目标</legend>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">AI 会根据主题选择带学或实战共创，进入后可以随时切换，不强制测验。</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            {MODES.map(({ value, label, description, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setMode(value)}
+                aria-pressed={mode === value}
+                className={`rounded-2xl border p-4 text-left transition ${mode === value ? 'border-sky-500 bg-sky-50 ring-2 ring-sky-100 dark:bg-sky-950/30' : 'border-slate-200 bg-white hover:border-sky-200 dark:border-slate-700 dark:bg-slate-900'}`}
+              >
+                <Icon className="h-5 w-5 text-sky-600" />
+                <div className="mt-3 font-medium text-slate-950 dark:text-white">{label}</div>
+                <div className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</div>
+              </button>
+            ))}
           </div>
-        )}
+        </fieldset>
 
-        <div className="mt-8 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <p className="text-xs md:text-sm text-slate-500">完成后会直接进入学习界面，并自动创建本次会话。</p>
-          <button
-            onClick={startLearning}
-            disabled={!canStart}
-            className="zen-button h-12 px-7 text-base inline-flex items-center justify-center"
-          >
-            开始系统学习
+        <label htmlFor="context" className="mt-7 block text-sm font-medium text-slate-700 dark:text-slate-200">
+          当前背景或材料 <span className="font-normal text-slate-400">（可选）</span>
+        </label>
+        <textarea
+          id="context"
+          value={context}
+          onChange={(event) => setContext(event.target.value)}
+          placeholder="粘贴一段材料、你的现有理解，或说明它将用于哪个项目。"
+          className="zen-input mt-2 min-h-32 resize-y py-3"
+        />
+
+        <div className="mt-7 flex justify-end">
+          <button type="submit" disabled={!topic.trim()} className="zen-button inline-flex min-h-12 items-center gap-2 px-6 disabled:opacity-50">
+            开始学习 <ArrowRight className="h-4 w-4" />
           </button>
         </div>
-      </section>
-    </div>
+      </form>
+    </main>
+  )
+}
+
+export default function LearningSetupPage() {
+  return (
+    <Suspense fallback={<main className="zen-page"><div className="zen-panel h-80 animate-pulse" /></main>}>
+      <LearningSetupForm />
+    </Suspense>
   )
 }

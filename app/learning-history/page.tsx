@@ -60,7 +60,7 @@ export default function LearningHistoryPage() {
         const [sessionsRes, mistakesRes, notesRes] = await Promise.all([
           fetch('/api/learning-progress?getAllSessions=true&limit=50&offset=0'),
           fetch('/api/user-answers?incorrectOnly=true&limit=50&offset=0'),
-          fetch('/api/learning-items'),
+          fetch('/api/notes'),
         ])
 
         const sessionsData = await sessionsRes.json()
@@ -69,7 +69,14 @@ export default function LearningHistoryPage() {
 
         setSessions(sessionsData.success && sessionsData.sessions ? sessionsData.sessions : [])
         setMistakes(mistakesData.success && mistakesData.userAnswers ? mistakesData.userAnswers : [])
-        setNotes(notesData.success && notesData.data ? notesData.data : [])
+        setNotes(notesData.success && notesData.data
+          ? notesData.data.map((note: any) => ({
+              ...note,
+              content: Array.isArray(note.blocks)
+                ? note.blocks.map((block: any) => block.content || '').join('')
+                : '',
+            }))
+          : [])
       } catch (error) {
         console.error('获取学习历史失败:', error)
       } finally {

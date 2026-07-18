@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/app/lib/prisma'
 import { memoryDB } from '@/app/lib/memory-db'
 import { clearDbUnavailable, noteDbUnavailable, shouldUseLocalDb } from '@/app/lib/db-fallback'
+import { getAuthenticatedUserId, unauthorizedResponse } from '@/app/lib/auth-user'
 
 type NotePayload = {
   id: string
@@ -14,8 +15,11 @@ type NotePayload = {
 
 export async function GET() {
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+
     if (shouldUseLocalDb()) {
-      const items = await memoryDB.getLearningItems()
+      const items = await memoryDB.getLearningItems(userId)
       const notes = items.map((it) => {
         try {
           const parsed = JSON.parse(it.text || '{}') as Partial<NotePayload>
@@ -43,6 +47,7 @@ export async function GET() {
     }
 
     const items = await prisma.learningItem.findMany({
+      where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 200,
     })
@@ -74,7 +79,9 @@ export async function GET() {
     return NextResponse.json({ success: true, data: notes })
   } catch (error) {
     if (noteDbUnavailable(error)) {
-      const items = await memoryDB.getLearningItems()
+      const userId = await getAuthenticatedUserId()
+      if (!userId) return unauthorizedResponse()
+      const items = await memoryDB.getLearningItems(userId)
       const notes = items.map((it) => {
         try {
           const parsed = JSON.parse(it.text || '{}') as Partial<NotePayload>
@@ -108,8 +115,13 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   let payloads: NotePayload[] = []
+  let ownerId = ''
 
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+    ownerId = userId
+
     const body = await request.json()
     const { item, items } = body as { item?: NotePayload; items?: NotePayload[] }
 
@@ -122,6 +134,7 @@ export async function POST(request: NextRequest) {
       await memoryDB.createLearningItems(
         payloads.map((n) => ({
           id: n.id,
+          userId,
           text: JSON.stringify(n),
           subject: 'notes',
           createdAt: new Date(n.createdAt).toISOString(),
@@ -136,6 +149,7 @@ export async function POST(request: NextRequest) {
         prisma.learningItem.create({
           data: {
             id: n.id,
+            userId,
             text: JSON.stringify(n),
             subject: 'notes',
             createdAt: new Date(n.createdAt),
@@ -151,6 +165,7 @@ export async function POST(request: NextRequest) {
         await memoryDB.createLearningItems(
           payloads.map((n: NotePayload) => ({
             id: n.id,
+            userId: ownerId,
             text: JSON.stringify(n),
             subject: 'notes',
             createdAt: new Date(n.createdAt).toISOString(),
@@ -166,25 +181,30 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId()
+    if (!userId) return unauthorizedResponse()
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (shouldUseLocalDb()) {
-      await memoryDB.deleteLearningItem(id || undefined)
+      await memoryDB.deleteLearningItem(id || undefined, userId)
       return NextResponse.json({ success: true, source: 'local' })
     }
     if (id) {
-      await prisma.learningItem.delete({ where: { id } })
+      await prisma.learningItem.deleteMany({ where: { id, userId } })
       clearDbUnavailable()
       return NextResponse.json({ success: true })
     }
-    await prisma.learningItem.deleteMany({})
+    await prisma.learningItem.deleteMany({ where: { userId } })
     clearDbUnavailable()
     return NextResponse.json({ success: true })
   } catch (error) {
     if (noteDbUnavailable(error)) {
       const { searchParams } = new URL(request.url)
       const id = searchParams.get('id')
-      await memoryDB.deleteLearningItem(id || undefined)
+      const userId = await getAuthenticatedUserId()
+      if (!userId) return unauthorizedResponse()
+      await memoryDB.deleteLearningItem(id || undefined, userId)
       return NextResponse.json({ success: true, source: 'local' })
     }
 

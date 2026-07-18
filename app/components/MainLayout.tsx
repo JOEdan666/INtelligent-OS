@@ -8,13 +8,10 @@ import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs'
 import { useThemeMode } from '../providers/ThemeProvider'
 
 const NAV_ITEMS = [
-  { key: '/', label: '主页' },
-  { key: '/validator', label: '验证新想法' },
-  { key: '/dashboard', label: 'Idea 点子库' },
-  { key: '/learning-setup', label: '开始学习' },
-  { key: '/unified-chat', label: 'AI 对话' },
-  { key: '/learning-history', label: '学习档案' },
-  { key: '/notes', label: '学习笔记' },
+  { key: '/', label: '今日' },
+  { key: '/learning-setup', label: '学习' },
+  { key: '/knowledge-base', label: '知识库' },
+  { key: '/review', label: '复习' },
 ]
 
 function isActive(pathname: string, key: string) {
